@@ -1543,7 +1543,7 @@ define KernelPackage/bnxt-en
 	  CONFIG_BNXT_FLOWER_OFFLOAD=y \
 	  CONFIG_BNXT_DCB=n \
 	  CONFIG_BNXT_HWMON=y
-  AUTOLOAD:=$(call AutoProbe,bnxt_en)
+  AUTOLOAD:=$(call AutoLoad,36,bnxt_en,1)
 endef
 
 define KernelPackage/bnxt-en/description
