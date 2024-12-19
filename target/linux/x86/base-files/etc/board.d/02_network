@@ -60,6 +60,14 @@ gowin-solution-co-ltd-gw-mb-u01)
 
 	ucidef_set_interfaces_lan_wan "eth1 eth2 eth3 eth4 poe" "sfp1 sfp2"
 	;;
+memorysolution-gmbh-super-server)
+	ucidef_set_network_device_path "lan1" "pci0000:c0/0000:c0:03.3/0000:c3:00.1"
+	ucidef_set_network_device_path "lan2" "pci0000:c0/0000:c0:03.3/0000:c3:00.0"
+	ucidef_set_network_device_path "mlx0" "pci0000:40/0000:40:01.1/0000:41:00.1"
+	ucidef_set_network_device_path "mlx1" "pci0000:40/0000:40:01.1/0000:41:00.0"
+
+	ucidef_set_interfaces_lan_wan "lan1 lan2" "mlx0 mlx1"
+	;;
 pc-engines-apu1|pc-engines-apu2|pc-engines-apu3)
 	ucidef_set_interfaces_lan_wan "eth1 eth2" "eth0"
 	;;
