@@ -14,6 +14,19 @@ define Device/Default
   IMAGES :=
 endef
 
+define Device/withsecure_usb-armory-mk2
+  DEVICE_VENDOR := WithSecure
+  DEVICE_MODEL := USB Armory Mk II
+  UBOOT := usb-armory-mk2
+  DEVICE_DTS := usb-armory-mk2
+  DEVICE_PACKAGES := kmod-leds-gpio kmod-usb-hid
+  FILESYSTEMS := squashfs ext4
+  IMAGES := combined.bin sysupgrade.bin
+  IMAGE/combined.bin := append-rootfs | pad-extra 128k | imx-sdcard-raw-uboot
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += withsecure_usb-armory-mk2
+
 define Device/technexion_imx7d-pico-pi
   DEVICE_VENDOR := TechNexion
   DEVICE_MODEL := PICO-PI-IMX7D
