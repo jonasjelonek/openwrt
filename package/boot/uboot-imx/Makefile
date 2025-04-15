@@ -44,6 +44,14 @@ define U-Boot/pico-pi-imx7d
   BUILD_DEVICES:=technexion_imx7d-pico-pi
 endef
 
+define U-Boot/usbarmory-mark-two
+  NAME:=WithSecure USB armory Mk II
+  UBOOT_IMAGE:=u-boot-dtb.imx
+  UBOOT_MAKE_FLAGS:=u-boot-dtb.imx
+  BUILD_SUBTARGET:=cortexa7
+  BUILD_DEVICES:=withsecure_usb-armory-mk2
+endef
+
 define U-Boot/wandboard
   NAME:=Wandboard Dual Lite/Quad/Solo
   BUILD_SUBTARGET:=cortexa9
@@ -54,6 +62,7 @@ UBOOT_TARGETS := \
 	apalis_imx6 \
 	mx6cuboxi \
 	pico-pi-imx7d \
+	usbarmory-mark-two \
 	wandboard
 
 UBOOT_MAKE_FLAGS += u-boot.imx
