@@ -1,0 +1,136 @@
+--- a/drivers/net/mdio/of_mdio.c
++++ b/drivers/net/mdio/of_mdio.c
+@@ -159,6 +159,7 @@ static int __of_mdiobus_parse_phys(struc
+ 		}
+ 
+ 		addr = of_mdio_parse_addr(&mdio->dev, child);
++		pr_info("%s: PHY with address %d", __FUNCTION__, addr);
+ 		if (addr < 0) {
+ 			/* Skip scanning for invalid ethernet-phy-package node */
+ 			if (scanphys)
+@@ -220,11 +221,15 @@ int __of_mdiobus_register(struct mii_bus
+ 	mdio->reset_post_delay_us = 0;
+ 	of_property_read_u32(np, "reset-post-delay-us", &mdio->reset_post_delay_us);
+ 
++	pr_info("Now registering mdiobus");
++
+ 	/* Register the MDIO bus */
+ 	rc = __mdiobus_register(mdio, owner);
+ 	if (rc)
+ 		return rc;
+ 
++	pr_info("Registered mdiobus, now adding all PHYs");
++
+ 	/* Loop over the child nodes and register a phy_device for each phy */
+ 	rc = __of_mdiobus_parse_phys(mdio, np, &scanphys);
+ 	if (rc)
+--- a/drivers/net/phy/mdio_bus.c
++++ b/drivers/net/phy/mdio_bus.c
+@@ -687,6 +687,8 @@ int __mdiobus_register(struct mii_bus *b
+ 	bool prevent_c45_scan;
+ 	int i, err;
+ 
++	pr_info("%s called\n", __func__);
++
+ 	if (!bus || !bus->name)
+ 		return -EINVAL;
+ 
+@@ -719,6 +721,7 @@ int __mdiobus_register(struct mii_bus *b
+ 	 */
+ 	bus->state = MDIOBUS_UNREGISTERED;
+ 
++	pr_info("%s: registering device", __func__);
+ 	err = device_register(&bus->dev);
+ 	if (err) {
+ 		pr_err("mii_bus %s failed to register\n", bus->id);
+@@ -744,6 +747,7 @@ int __mdiobus_register(struct mii_bus *b
+ 			fsleep(bus->reset_post_delay_us);
+ 	}
+ 
++	pr_info("Calling bus reset");
+ 	if (bus->reset) {
+ 		err = bus->reset(bus);
+ 		if (err)
+@@ -751,6 +755,7 @@ int __mdiobus_register(struct mii_bus *b
+ 	}
+ 
+ 	if (bus->read) {
++		pr_info("Scan bus C22");
+ 		err = mdiobus_scan_bus_c22(bus);
+ 		if (err)
+ 			goto error;
+@@ -759,6 +764,7 @@ int __mdiobus_register(struct mii_bus *b
+ 	prevent_c45_scan = mdiobus_prevent_c45_scan(bus);
+ 
+ 	if (!prevent_c45_scan && bus->read_c45) {
++		pr_info("Scan bus C45");
+ 		err = mdiobus_scan_bus_c45(bus);
+ 		if (err)
+ 			goto error;
+@@ -766,6 +772,7 @@ int __mdiobus_register(struct mii_bus *b
+ 
+ 	mdiobus_setup_mdiodev_from_board_info(bus, mdiobus_create_device);
+ 
++	pr_info("BUS REGISTERED");
+ 	bus->state = MDIOBUS_REGISTERED;
+ 	dev_dbg(&bus->dev, "probed\n");
+ 	return 0;
+--- a/drivers/net/mdio/fwnode_mdio.c
++++ b/drivers/net/mdio/fwnode_mdio.c
+@@ -103,8 +103,10 @@ int fwnode_mdiobus_phy_device_register(s
+ 	/* All data is now stored in the phy struct;
+ 	 * register it
+ 	 */
++	pr_info("%s: Now registering phy", __FUNCTION__);
+ 	rc = phy_device_register(phy);
+ 	if (rc) {
++		pr_info("%s: failed to register phy", __FUNCTION__);
+ 		device_set_node(&phy->mdio.dev, NULL);
+ 		fwnode_handle_put(child);
+ 		return rc;
+@@ -137,12 +139,16 @@ int fwnode_mdiobus_register_phy(struct m
+ 	}
+ 
+ 	is_c45 = fwnode_device_is_compatible(child, "ethernet-phy-ieee802.3-c45");
+-	if (is_c45 || fwnode_get_phy_id(child, &phy_id))
++	if (is_c45 || fwnode_get_phy_id(child, &phy_id)) {
++		pr_info("%s: just get phy device", __FUNCTION__);
+ 		phy = get_phy_device(bus, addr, is_c45);
+-	else
++	} else {
++		pr_info("%s: create phy device", __FUNCTION__);
+ 		phy = phy_device_create(bus, addr, phy_id, 0, NULL);
++	}
+ 	if (IS_ERR(phy)) {
+ 		rc = PTR_ERR(phy);
++		pr_info("%s: error, no valid phy, %d", __FUNCTION__, rc);
+ 		goto clean_mii_ts;
+ 	}
+ 
+@@ -162,6 +168,7 @@ int fwnode_mdiobus_register_phy(struct m
+ 			goto clean_phy;
+ 		}
+ 	} else if (is_of_node(child)) {
++		pr_info("%s: register phy device", __FUNCTION__);
+ 		rc = fwnode_mdiobus_phy_device_register(bus, phy, child, addr);
+ 		if (rc)
+ 			goto clean_phy;
+--- a/drivers/net/phy/phy_device.c
++++ b/drivers/net/phy/phy_device.c
+@@ -529,6 +529,8 @@ static int phy_bus_match(struct device *
+ 	const int num_ids = ARRAY_SIZE(phydev->c45_ids.device_ids);
+ 	int i;
+ 
++	pr_info("%s: matching dev at %s with driver %s", __FUNCTION__, dev->of_node->name, drv->name);
++
+ 	if (!(phydrv->mdiodrv.flags & MDIO_DEVICE_IS_PHY))
+ 		return 0;
+ 
+@@ -546,6 +548,7 @@ static int phy_bus_match(struct device *
+ 		}
+ 		return 0;
+ 	} else {
++		pr_info("%s: c22 phydev has id %x", __FUNCTION__, phydev->phy_id);
+ 		return phy_id_compare(phydev->phy_id, phydrv->phy_id,
+ 				      phydrv->phy_id_mask);
+ 	}
