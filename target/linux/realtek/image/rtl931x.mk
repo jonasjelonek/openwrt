@@ -61,3 +61,9 @@ ifeq ($(IB),)
 endif
 endef
 
+define Device/zyxel_xs1930-10
+  $(Device/zyxel_xs1930)
+  DEVICE_MODEL := XS1930-10
+endef
+TARGET_DEVICES += zyxel_xs1930-10
+
