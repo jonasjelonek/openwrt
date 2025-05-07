@@ -30,3 +30,23 @@ define Device/plasmacloud_psx28
   DEVICE_PACKAGES += poemgr
 endef
 TARGET_DEVICES += plasmacloud_psx28
+
+define Device/zyxel_xs1930-10
+  SOC := rtl9313
+#  UIMAGE_MAGIC := 0x93100007
+  UIMAGE_MAGIC := 0x4E475020
+#  ZYXEL_VERS := ABQE
+  DEVICE_VENDOR := Zyxel
+  DEVICE_MODEL := XS1930-10
+  DEVICE_PACKAGES := kmod-hwmon-gpiofan kmod-thermal
+  IMAGE_SIZE := 31808k
+#  KERNEL_LOADADDR := 0x81000000
+#  KERNEL_INITRAMFS := \
+#        kernel-bin | \
+#        append-dtb | \
+#        gzip | \
+#        zyxel-vers | \
+#        uImage gzip
+endef
+TARGET_DEVICES += zyxel_xs1930-10
+
