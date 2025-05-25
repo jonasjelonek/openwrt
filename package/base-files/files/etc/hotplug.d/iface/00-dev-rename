@@ -1,0 +1,47 @@
+#!/bin/sh
+
+dev_rename() {
+	local DEV_CONF="${1}"
+	local DEV_MAC DEV_NAME DEV_ONAME DEV_MATCH
+
+	config_get DEV_MATCH "${DEV_CONF}" match
+	config_get DEV_NAME "${DEV_CONF}" name
+
+	case "${DEV_MATCH}" in
+	mac)
+		config_get DEV_MAC "${DEV_CONF}" macaddr
+
+		#logger -t hotplug "dev_rename: INFO match dev by mac '${DEV_MAC}'"
+		DEV_ONAME="$(grep -l -e "${DEV_MAC}" \
+			$(find /sys/class/net/*/device/uevent \
+			| sed -e "s|/device/uevent$|/address|") \
+			| awk -F '/' '{print $5}')"
+		;;
+	name)
+		config_get DEV_ONAME "${DEV_CONF}" oname
+		if [ -n "${DEV_ONAME}" ]
+			logger -t hotplug "dev_rename: WARN match by name but oname missing"
+			exit 1
+		fi
+
+		#logger -t hotplug "dev_rename: INFO match dev by name '${DEV_ONAME}'"
+		if [ ! -d "/sys/class/net/${DEV_ONAME}" ]; then
+			logger -t hotplug "dev_rename: ERROR dev '${DEV_ONAME}' not found, skipping ..."
+			exit 1
+		fi
+		;;
+	*)
+		# DO NOTHING
+		exit 1
+	esac
+
+	if [ -n "${DEV_ONAME}" ] && [ "${DEV_ONAME}" != "${DEV_NAME}" ]; then
+		ip link set "${DEV_ONAME}" name "${DEV_NAME}"
+		logger -t hotplug "device '${DEV_ONAME}' renamed to '${DEV_NAME}'"
+	fi
+}
+
+. /lib/functions.sh
+config_load network
+config_foreach dev_rename device
+
