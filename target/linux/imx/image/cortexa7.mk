@@ -2,6 +2,15 @@ DEVICE_VARS += UBOOT
 
 include common.mk
 
+define Build/imx-usbarmory-sdcard
+	$(Build/imx-combined-image-prepare)
+
+	$(Build/imx-combined-image)
+	dd if=$(STAGING_DIR_IMAGE)/$(UBOOT)-u-boot-dtb.imx of=$@ bs=1024 seek=1 conv=notrunc
+
+	$(Build/imx-combined-image-clean)
+endef
+
 define Device/Default
   PROFILES := Default
   FILESYSTEMS := squashfs ext4
@@ -29,3 +38,19 @@ define Device/technexion_imx7d-pico-pi
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
 endef
 TARGET_DEVICES += technexion_imx7d-pico-pi
+
+define Device/withsecure_usbarmory-mk2
+  DEVICE_VENDOR := WithSecure
+  DEVICE_MODEL := USB armory Mk II
+  UBOOT := usbarmory-mark-two
+  DEVICE_DTS := imx6ulz-usbarmory-mk2
+  DEVICE_PACKAGES := kmod-crypto-hw-mxs-dcp kmod-usb-gadget-eth kmod-usb-gadget-ncm \
+	kmod-usb-gadget-serial kmod-usb-gadget-cdc-composite \
+	kmod-usb-net-cdc-ether kmod-usb-net-cdc-ncm usbgadget
+  FILESYSTEMS := squashfs ext4
+  SUPPORTED_DEVICES += withsecure,imx6ulz-usbarmory-mk2
+  IMAGES := combined.bin sysupgrade.bin
+  IMAGE/combined.bin := append-rootfs | pad-extra 128k | imx-usbarmory-sdcard
+  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+endef
+TARGET_DEVICES += withsecure_usbarmory-mk2

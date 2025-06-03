@@ -1,0 +1,35 @@
+#!/bin/sh
+
+. /lib/functions/uci-defaults.sh
+. /lib/functions/system.sh
+
+board=$(board_name)
+
+case "$board" in
+withsecure,imx6ulz-usbarmory-mk2)
+	usbnet_devaddr=$(fw_printenv usbnet_devaddr)
+	usbnet_hostaddr=$(fw_printenv usbnet_hostaddr)
+
+	uci set usbgadget.g0=gadget
+	uci set usbgadget.g0.idVendor='0x0525'
+	uci set usbgadget.g0.idProduct='0xa4a1'
+	uci set usbgadget.g0.bDeviceClass='2'
+	uci set usbgadget.g0.product='USB armory Mk II'
+	uci set usbgadget.g0.UDC='ci_hdrc.0'
+
+	uci set usbgadget.cfg0=configuration
+	uci set usbgadget.cfg0.configuration='NCM'
+	uci set usbgadget.cfg0.gadget='g0'
+
+	uci set usbgadget.ncm0=function
+	uci set usbgadget.ncm0.function='ncm'
+	uci set usbgadget.ncm0.configuration='cfg0'
+
+	[ -n "$usbnet_devaddr" ] && \
+		usbnet_devaddr="${usbnet_devaddr#*=}" && \
+		uci set usbgadget.ncm0.dev_addr="$usbnet_devaddr"
+	[ -n "$usbnet_hostaddr" ] && \
+		usbnet_hostaddr="${usbnet_hostaddr#*=}" && \
+		uci set usbgadget.ncm0.host_addr="$usbnet_hostaddr"
+	;;
+esac
