@@ -1,0 +1,19 @@
+echo "USB armory Mk II OpenWrt boot script"
+
+# Write environment to storage once
+if test ${env_stored} != 1; then setenv env_stored 1; saveenv; fi
+
+# Set console variable for both UART and HDMI
+setenv console "console=ttymxc1,115200"
+setenv fdt_name imx6ulz-usbarmory-mk2.dtb
+setenv devtype mmc
+setenv mmcdev 0
+setenv mmckernpart 1
+setenv mmcrootpart 2
+part uuid mmc ${mmcdev}:${mmcrootpart} uuid
+
+setenv bootargs "${console} root=PARTUUID=${uuid} rw rootwait"
+mmc dev ${mmcdev}
+load ${devtype} ${mmcdev}:${mmckernpart} ${kernel_addr_r} /uImage
+load ${devtype} ${mmcdev}:${mmckernpart} ${fdt_addr_r} /${fdt_name}
+bootm ${kernel_addr_r} - ${fdt_addr_r}

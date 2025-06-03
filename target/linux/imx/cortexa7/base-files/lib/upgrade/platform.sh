@@ -4,7 +4,8 @@ RAMFS_COPY_BIN='blkid jffs2reset'
 
 enable_image_metadata_check() {
 	case "$(board_name)" in
-	technexion,imx7d-pico-pi)
+	technexion,imx7d-pico-pi|\
+	withsecure,imx6ulz-usbarmory-mk2)
 		REQUIRE_IMAGE_METADATA=1
 		;;
 	esac
@@ -15,7 +16,8 @@ platform_check_image() {
 	local board=$(board_name)
 
 	case "$board" in
-	technexion,imx7d-pico-pi)
+	technexion,imx7d-pico-pi|\
+	withsecure,imx6ulz-usbarmory-mk2)
 		return 0
 		;;
 	esac
@@ -28,7 +30,8 @@ platform_do_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
-	technexion,imx7d-pico-pi)
+	technexion,imx7d-pico-pi|\
+	withsecure,imx6ulz-usbarmory-mk2)
 		imx_sdcard_do_upgrade "$1"
 		;;
 	esac
@@ -38,7 +41,8 @@ platform_copy_config() {
 	local board=$(board_name)
 
 	case "$board" in
-	technexion,imx7d-pico-pi)
+	technexion,imx7d-pico-pi|\
+	withsecure,imx6ulz-usbarmory-mk2)
 		imx_sdcard_copy_config
 		;;
 	esac
@@ -48,7 +52,8 @@ platform_pre_upgrade() {
 	local board=$(board_name)
 
 	case "$board" in
-	technexion,imx7d-pico-pi)
+	technexion,imx7d-pico-pi|\
+	withsecure,imx6ulz-usbarmory-mk2)
 		imx_sdcard_pre_upgrade
 		;;
 	esac
