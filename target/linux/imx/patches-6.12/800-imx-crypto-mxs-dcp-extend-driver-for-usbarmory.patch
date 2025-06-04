@@ -1,0 +1,116 @@
+--- a/drivers/crypto/mxs-dcp.c
++++ b/drivers/crypto/mxs-dcp.c
+@@ -1,8 +1,14 @@
+-// SPDX-License-Identifier: GPL-2.0-or-later
+ /*
+- * Freescale i.MX23/i.MX28 Data Co-Processor driver
++ * Freescale i.MX23/i.MX28/i.MX6SL/i.MX6ULL Data Co-Processor driver
+  *
+  * Copyright (C) 2013 Marek Vasut <marex@denx.de>
++ *
++ * The code contained herein is licensed under the GNU General Public
++ * License. You may obtain a copy of the GNU General Public License
++ * Version 2 or later at the following locations:
++ *
++ * http://www.opensource.org/licenses/gpl-license.html
++ * http://www.gnu.org/copyleft/gpl.html
+  */
+ 
+ #include <linux/dma-mapping.h>
+@@ -173,6 +179,12 @@ static struct dcp *global_sdcp;
+ 
+ #define MXS_DCP_CONTROL1_KEY_SELECT_SHIFT	8
+ 
++/* SNVS registers */
++#define SNVS_HPSR_REG				0x020cc014
++#define SNVS_HPSR_SSM_STATE_MASK		0xf00
++#define SNVS_HPSR_SSM_STATE_TRUSTED		0xd00
++#define SNVS_HPSR_SSM_STATE_SECURE		0xf00
++
+ static int mxs_dcp_start_dma(struct dcp_async_ctx *actx)
+ {
+ 	int dma_err;
+@@ -265,12 +277,12 @@ static int mxs_dcp_run_aes(struct dcp_as
+ 		    MXS_DCP_CONTROL0_INTERRUPT |
+ 		    MXS_DCP_CONTROL0_ENABLE_CIPHER;
+ 
+-	if (!key_referenced)
+-		/* Payload contains the key. */
+-		desc->control0 |= MXS_DCP_CONTROL0_PAYLOAD_KEY;
+-	else if (actx->key[0] == DCP_PAES_KEY_OTP)
++	if (key_referenced)
+ 		/* Set OTP key bit to select the key via KEY_SELECT. */
+ 		desc->control0 |= MXS_DCP_CONTROL0_OTP_KEY;
++	else
++		/* Payload contains the key. */
++		desc->control0 |= MXS_DCP_CONTROL0_PAYLOAD_KEY;
+ 
+ 	if (rctx->enc)
+ 		desc->control0 |= MXS_DCP_CONTROL0_CIPHER_ENCRYPT;
+@@ -948,7 +960,7 @@ static struct skcipher_alg dcp_aes_algs[
+ 		.base.cra_driver_name	= "ecb-paes-dcp",
+ 		.base.cra_priority	= 401,
+ 		.base.cra_alignmask	= 15,
+-		.base.cra_flags		= CRYPTO_ALG_ASYNC | CRYPTO_ALG_INTERNAL,
++		.base.cra_flags		= CRYPTO_ALG_ASYNC,
+ 		.base.cra_blocksize	= AES_BLOCK_SIZE,
+ 		.base.cra_ctxsize	= sizeof(struct dcp_async_ctx),
+ 		.base.cra_module	= THIS_MODULE,
+@@ -964,7 +976,7 @@ static struct skcipher_alg dcp_aes_algs[
+ 		.base.cra_driver_name	= "cbc-paes-dcp",
+ 		.base.cra_priority	= 401,
+ 		.base.cra_alignmask	= 15,
+-		.base.cra_flags		= CRYPTO_ALG_ASYNC | CRYPTO_ALG_INTERNAL,
++		.base.cra_flags		= CRYPTO_ALG_ASYNC,
+ 		.base.cra_blocksize	= AES_BLOCK_SIZE,
+ 		.base.cra_ctxsize	= sizeof(struct dcp_async_ctx),
+ 		.base.cra_module	= THIS_MODULE,
+@@ -1060,6 +1072,9 @@ static int mxs_dcp_probe(struct platform
+ 	int i, ret;
+ 	int dcp_vmi_irq, dcp_irq;
+ 
++	void __iomem *page;
++	u32 ssm_state, offset;
++
+ 	if (global_sdcp) {
+ 		dev_err(dev, "Only one DCP instance allowed!\n");
+ 		return -ENODEV;
+@@ -1197,6 +1212,20 @@ static int mxs_dcp_probe(struct platform
+ 		}
+ 	}
+ 
++	dev_info(&pdev->dev, "mxs_dcp: initialized\n");
++
++	page = ioremap(SNVS_HPSR_REG & ~(SZ_4K - 1), SZ_4K);
++	offset = SNVS_HPSR_REG & (SZ_4K - 1);
++	ssm_state = (__raw_readl(page + offset) & SNVS_HPSR_SSM_STATE_MASK);
++
++	if (ssm_state == SNVS_HPSR_SSM_STATE_TRUSTED) {
++		printk(KERN_INFO "mxs_dcp: Trusted State detected\n");
++	} else if (ssm_state == SNVS_HPSR_SSM_STATE_SECURE) {
++		printk(KERN_INFO "mxs_dcp: Secure State detected\n");
++	} else {
++		printk(KERN_NOTICE "mxs_dcp: WARNING - not in Trusted or Secure State, Non-volatile Test Key in effect\n");
++	}
++
+ 	return 0;
+ 
+ err_unregister_sha1:
+@@ -1240,6 +1269,8 @@ static void mxs_dcp_remove(struct platfo
+ static const struct of_device_id mxs_dcp_dt_ids[] = {
+ 	{ .compatible = "fsl,imx23-dcp", .data = NULL, },
+ 	{ .compatible = "fsl,imx28-dcp", .data = NULL, },
++	{ .compatible = "fsl,imx6sl-dcp", .data = NULL, },
++	{ .compatible = "fsl,imx6ull-dcp", .data = NULL, },
+ 	{ /* sentinel */ }
+ };
+ 
+@@ -1247,7 +1278,7 @@ MODULE_DEVICE_TABLE(of, mxs_dcp_dt_ids);
+ 
+ static struct platform_driver mxs_dcp_driver = {
+ 	.probe	= mxs_dcp_probe,
+-	.remove_new = mxs_dcp_remove,
++	.remove = mxs_dcp_remove,
+ 	.driver	= {
+ 		.name		= "mxs-dcp",
+ 		.of_match_table	= mxs_dcp_dt_ids,
