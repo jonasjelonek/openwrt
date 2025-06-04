@@ -1,0 +1,194 @@
+--- a/drivers/crypto/mxs-dcp.c
++++ b/drivers/crypto/mxs-dcp.c
+@@ -1,8 +1,14 @@
+-// SPDX-License-Identifier: GPL-2.0-or-later
+ /*
+- * Freescale i.MX23/i.MX28 Data Co-Processor driver
++ * Freescale i.MX23/i.MX28/i.MX6SL/i.MX6ULL Data Co-Processor driver
+  *
+  * Copyright (C) 2013 Marek Vasut <marex@denx.de>
++ *
++ * The code contained herein is licensed under the GNU General Public
++ * License. You may obtain a copy of the GNU General Public License
++ * Version 2 or later at the following locations:
++ *
++ * http://www.opensource.org/licenses/gpl-license.html
++ * http://www.gnu.org/copyleft/gpl.html
+  */
+ 
+ #include <linux/dma-mapping.h>
+@@ -155,6 +161,7 @@ static struct dcp *global_sdcp;
+ #define MXS_DCP_CONTROL0_HASH_TERM		(1 << 13)
+ #define MXS_DCP_CONTROL0_HASH_INIT		(1 << 12)
+ #define MXS_DCP_CONTROL0_PAYLOAD_KEY		(1 << 11)
++#define MXS_DCP_CONTROL0_OTP_KEY		(1 << 10)
+ #define MXS_DCP_CONTROL0_CIPHER_ENCRYPT		(1 << 8)
+ #define MXS_DCP_CONTROL0_CIPHER_INIT		(1 << 9)
+ #define MXS_DCP_CONTROL0_ENABLE_HASH		(1 << 6)
+@@ -168,6 +175,21 @@ static struct dcp *global_sdcp;
+ #define MXS_DCP_CONTROL1_CIPHER_MODE_ECB	(0 << 4)
+ #define MXS_DCP_CONTROL1_CIPHER_SELECT_AES128	(0 << 0)
+ 
++#define MXS_DCP_CONTROL1_KEY_SELECT_KEY0	(   0 << 8)
++#define MXS_DCP_CONTROL1_KEY_SELECT_KEY1	(   1 << 8)
++#define MXS_DCP_CONTROL1_KEY_SELECT_KEY2	(   2 << 8)
++#define MXS_DCP_CONTROL1_KEY_SELECT_KEY3	(   3 << 8)
++#define MXS_DCP_CONTROL1_KEY_SELECT_UNIQUE_KEY	(0xfe << 8)
++#define MXS_DCP_CONTROL1_KEY_SELECT_OTP_KEY	(0xff << 8)
++
++/* SNVS registers */
++#define SNVS_HPSR_REG				0x020cc014
++#define SNVS_HPSR_SSM_STATE_MASK		0xf00
++#define SNVS_HPSR_SSM_STATE_TRUSTED		0xd00
++#define SNVS_HPSR_SSM_STATE_SECURE		0xf00
++
++#define CRYPTO_TFM_RES_MASK	0xfff00000
++
+ static int mxs_dcp_start_dma(struct dcp_async_ctx *actx)
+ {
+ 	int dma_err;
+@@ -225,9 +247,17 @@ static int mxs_dcp_run_aes(struct dcp_as
+ 	struct dcp_dma_desc *desc = &sdcp->coh->desc[actx->chan];
+ 	struct dcp_aes_req_ctx *rctx = skcipher_request_ctx(req);
+ 	int ret;
++	unsigned int dcp_len = 0;
++
++	if (actx->key_len == 0) {
++		/* Use device-specific hardware key, only prepend IV. */
++		dcp_len = AES_BLOCK_SIZE;
++	} else {
++		dcp_len = AES_KEYSIZE_128 + AES_BLOCK_SIZE;
++	}
+ 
+ 	key_phys = dma_map_single(sdcp->dev, sdcp->coh->aes_key,
+-				  2 * AES_KEYSIZE_128, DMA_TO_DEVICE);
++				  dcp_len, DMA_TO_DEVICE);
+ 	ret = dma_mapping_error(sdcp->dev, key_phys);
+ 	if (ret)
+ 		return ret;
+@@ -255,8 +285,14 @@ static int mxs_dcp_run_aes(struct dcp_as
+ 		    MXS_DCP_CONTROL0_INTERRUPT |
+ 		    MXS_DCP_CONTROL0_ENABLE_CIPHER;
+ 
+-	/* Payload contains the key. */
+-	desc->control0 |= MXS_DCP_CONTROL0_PAYLOAD_KEY;
++	if (actx->key_len == 0) {
++		/* Use device-specific hardware key, payload does not contain the key. */
++		desc->control0 |= MXS_DCP_CONTROL0_OTP_KEY;
++		desc->control1 |= MXS_DCP_CONTROL1_KEY_SELECT_UNIQUE_KEY;
++	} else {
++		/* Payload contains the key. */
++		desc->control0 |= MXS_DCP_CONTROL0_PAYLOAD_KEY;
++	}
+ 
+ 	if (rctx->enc)
+ 		desc->control0 |= MXS_DCP_CONTROL0_CIPHER_ENCRYPT;
+@@ -284,7 +320,7 @@ aes_done_run:
+ err_dst:
+ 	dma_unmap_single(sdcp->dev, src_phys, DCP_BUF_SZ, DMA_TO_DEVICE);
+ err_src:
+-	dma_unmap_single(sdcp->dev, key_phys, 2 * AES_KEYSIZE_128,
++	dma_unmap_single(sdcp->dev, key_phys, dcp_len,
+ 			 DMA_TO_DEVICE);
+ 
+ 	return ret;
+@@ -324,11 +360,11 @@ static int mxs_dcp_aes_block_crypt(struc
+ 
+ 	if (!rctx->ecb) {
+ 		/* Copy the CBC IV just past the key. */
+-		memcpy(key + AES_KEYSIZE_128, req->iv, AES_KEYSIZE_128);
++		memcpy(key + actx->key_len, req->iv, AES_BLOCK_SIZE);
+ 		/* CBC needs the INIT set. */
+ 		init = 1;
+ 	} else {
+-		memset(key + AES_KEYSIZE_128, 0, AES_KEYSIZE_128);
++		memset(key + actx->key_len, 0, AES_BLOCK_SIZE);
+ 	}
+ 
+ 	for_each_sg(req->src, src, sg_nents(req->src), i) {
+@@ -453,7 +489,7 @@ static int mxs_dcp_aes_enqueue(struct sk
+ 	struct dcp_aes_req_ctx *rctx = skcipher_request_ctx(req);
+ 	int ret;
+ 
+-	if (unlikely(actx->key_len != AES_KEYSIZE_128))
++	if (actx->key_len != 0 && actx->key_len != AES_KEYSIZE_128)
+ 		return mxs_dcp_block_fallback(req, enc);
+ 
+ 	rctx->enc = enc;
+@@ -505,6 +541,11 @@ static int mxs_dcp_aes_setkey(struct cry
+ 		return 0;
+ 	}
+ 
++	/* Use device-specific hardware key. */
++	if (len == 0) {
++		return 0;
++	}
++
+ 	/*
+ 	 * If the requested AES key size is not supported by the hardware,
+ 	 * but is supported by in-kernel software implementation, we use
+@@ -862,8 +903,8 @@ static struct skcipher_alg dcp_aes_algs[
+ 		.base.cra_blocksize	= AES_BLOCK_SIZE,
+ 		.base.cra_ctxsize	= sizeof(struct dcp_async_ctx),
+ 		.base.cra_module	= THIS_MODULE,
+-
+-		.min_keysize		= AES_MIN_KEY_SIZE,
++		/* setkey with keysize 0 enables use of device-specific hardware key */
++		.min_keysize		= 0,
+ 		.max_keysize		= AES_MAX_KEY_SIZE,
+ 		.setkey			= mxs_dcp_aes_setkey,
+ 		.encrypt		= mxs_dcp_aes_ecb_encrypt,
+@@ -880,8 +921,8 @@ static struct skcipher_alg dcp_aes_algs[
+ 		.base.cra_blocksize	= AES_BLOCK_SIZE,
+ 		.base.cra_ctxsize	= sizeof(struct dcp_async_ctx),
+ 		.base.cra_module	= THIS_MODULE,
+-
+-		.min_keysize		= AES_MIN_KEY_SIZE,
++		/* setkey with keysize 0 enables use of device-specific hardware key */
++		.min_keysize		= 0,
+ 		.max_keysize		= AES_MAX_KEY_SIZE,
+ 		.setkey			= mxs_dcp_aes_setkey,
+ 		.encrypt		= mxs_dcp_aes_cbc_encrypt,
+@@ -973,8 +1014,12 @@ static int mxs_dcp_probe(struct platform
+ 	struct device *dev = &pdev->dev;
+ 	struct dcp *sdcp = NULL;
+ 	int i, ret;
++
+ 	int dcp_vmi_irq, dcp_irq;
+ 
++	void __iomem *page;
++	u32 ssm_state, offset;
++
+ 	if (global_sdcp) {
+ 		dev_err(dev, "Only one DCP instance allowed!\n");
+ 		return -ENODEV;
+@@ -1112,6 +1157,20 @@ static int mxs_dcp_probe(struct platform
+ 		}
+ 	}
+ 
++	dev_info(&pdev->dev, "mxs_dcp: initialized\n");
++
++	page = ioremap(SNVS_HPSR_REG & ~(SZ_4K - 1), SZ_4K);
++	offset = SNVS_HPSR_REG & (SZ_4K - 1);
++	ssm_state = (__raw_readl(page + offset) & SNVS_HPSR_SSM_STATE_MASK);
++
++	if (ssm_state == SNVS_HPSR_SSM_STATE_TRUSTED) {
++		printk(KERN_INFO "mxs_dcp: Trusted State detected\n");
++	} else if (ssm_state == SNVS_HPSR_SSM_STATE_SECURE) {
++		printk(KERN_INFO "mxs_dcp: Secure State detected\n");
++	} else {
++		printk(KERN_NOTICE "mxs_dcp: WARNING - not in Trusted or Secure State, Non-volatile Test Key in effect\n");
++	}
++
+ 	return 0;
+ 
+ err_unregister_sha1:
+@@ -1157,6 +1216,8 @@ static int mxs_dcp_remove(struct platfor
+ static const struct of_device_id mxs_dcp_dt_ids[] = {
+ 	{ .compatible = "fsl,imx23-dcp", .data = NULL, },
+ 	{ .compatible = "fsl,imx28-dcp", .data = NULL, },
++	{ .compatible = "fsl,imx6sl-dcp", .data = NULL, },
++	{ .compatible = "fsl,imx6ull-dcp", .data = NULL, },
+ 	{ /* sentinel */ }
+ };
+ 
