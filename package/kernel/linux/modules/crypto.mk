@@ -454,6 +454,18 @@ endef
 
 $(eval $(call KernelPackage,crypto-hw-ixp4xx))
 
+define KernelPackage/crypto-hw-mxs-dcp
+  TITLE:=Freescale i.MX23/i.MX28 Data Co-Processor driver
+  DEPENDS:=@TARGET_imx
+  KCONFIG:= \
+	CONFIG_CRYPTO_HW=y \
+	CONFIG_CRYPTO_DEV_MXS_DCP
+  FILES:=$(LINUX_DIR)/drivers/crypto/mxs-dcp.ko
+  AUTOLOAD:=$(call AutoProbe,mxs-dcp)
+  $(call AddDepends/crypto)
+endef
+
+$(eval $(call KernelPackage,crypto-hw-mxs-dcp))
 
 define KernelPackage/crypto-hw-padlock
   TITLE:=VIA PadLock ACE with AES/SHA hw crypto module
