@@ -1,0 +1,19 @@
+--- a/arch/arm/mach-imx/mach-imx6ul.c
++++ b/arch/arm/mach-imx/mach-imx6ul.c
+@@ -12,8 +12,14 @@
+ 
+ static void __init imx6ul_init_machine(void)
+ {
+-	imx_print_silicon_rev(cpu_is_imx6ull() ? "i.MX6ULL" : "i.MX6UL",
+-		imx_get_soc_revision());
++	const char* soc = "i.MX6UL";
++
++	if (cpu_is_imx6ull())
++		soc = "i.MX6ULL";
++	else if (cpu_is_imx6ulz())
++		soc = "i.MX6ULZ";
++
++	imx_print_silicon_rev(soc, imx_get_soc_revision());
+ 
+ 	of_platform_default_populate(NULL, NULL, NULL);
+ 	imx_anatop_init();
