@@ -896,12 +896,13 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +#endif
 --- /dev/null
 +++ b/configs/usbarmory-mark-two_defconfig
-@@ -0,0 +1,89 @@
+@@ -0,0 +1,93 @@
 +CONFIG_ARM=y
 +CONFIG_ARCH_MX6=y
 +CONFIG_TEXT_BASE=0x87800000
 +CONFIG_TARGET_USBARMORY_MARK_TWO=y
 +CONFIG_MX6ULL=y
++CONFIG_LEGACY_IMAGE_FORMAT=n
 +
 +CONFIG_SYS_DDR_512MB=y
 +# CONFIG_SYS_DDR_1GB is not set
@@ -959,6 +960,9 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +CONFIG_OF_SEPARATE=y
 +CONFIG_DEFAULT_DEVICE_TREE="imx6ulz-usbarmory"
 +
++# Compression support
++CONFIG_LZMA=y
++
 +# Secure/Verified boot
 +CONFIG_IMX_HAB=y
 +CONFIG_FIT=y
@@ -988,7 +992,7 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +CONFIG_LEGACY_IMAGE_FORMAT=y
 --- /dev/null
 +++ b/include/configs/usbarmory-mark-two.h
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,198 @@
 +/* SPDX-License-Identifier: GPL-2.0+ */
 +/*
 + * USB armory Mk II board configuration settings
@@ -1013,7 +1017,7 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +#define CFG_MXC_USB_PORTSC	(PORT_PTS_UTMI | PORT_PTS_PTW)
 +
 +/* Boot parameters */
-+#define USBARMORY_FIT_PATH	"/boot/usbarmory.itb"
++#define USBARMORY_FIT_PATH	"openwrt.itb"
 +#define USBARMORY_FIT_ADDR	"0x80800000"
 +#define USBARMORY_FIT_CONF	"conf-1"
 +#define USBARMORY_FIT_SIZE	"0x4000000"
@@ -1029,7 +1033,7 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +/* Bootargs */
 +
 +#define CONFIG_USE_BOOTARGS
-+#define CONFIG_BOOTARGS "console=ttymxc1,115200 root=/dev/mmcblk" USBARMORY_BOOT_DEV "p1 rootwait rw"
++#define CONFIG_BOOTARGS "console=ttymxc1,115200 root=/dev/mmcblk" USBARMORY_BOOT_DEV "p2 rootwait rw"
 +
 +/* scripts */
 +
@@ -1106,20 +1110,8 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +
 +#define BOOTENV_TFTP							\
 +	"start_tftp="							\
-+		"dhcp ${kernel_addr_r} ${serverip}:${bootfile} ; "	\
-+		"dhcp ${fdt_addr_r} ${serverip}:${fdtfile} ; "		\
-+		"bootm ${kernel_addr_r} - ${fdt_addr_r}\0"
-+
-+#define BOOTENV_VERIFIED_OPEN												\
-+	"start_verified_open="												\
-+		"ext2load mmc ${mmcdev}:1 " USBARMORY_FIT_ADDR " " USBARMORY_FIT_PATH " " USBARMORY_FIT_SIZE " ; "	\
-+		"bootm " USBARMORY_FIT_ADDR "#" USBARMORY_FIT_CONF "\0"
-+
-+#define BOOTENV_NORMAL								\
-+	"start_normal=run distro_bootcmd ; "					\
-+		"ext2load mmc ${mmcdev}:1 ${kernel_addr_r} /boot/${bootfile} ; "\
-+		"ext2load mmc ${mmcdev}:1 ${fdt_addr_r} /boot/${fdtfile} ; "	\
-+		"bootz ${kernel_addr_r} - ${fdt_addr_r}\0"
++		"dhcp ${load_addr} ${serverip}:${bootfile} ; "	\
++		"bootm ${kernel_addr_r}\0"
 +
 +#define BOOTENV_OPTEE								\
 +	"start_optee="					\
@@ -1128,17 +1120,22 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +		"ext2load mmc ${mmcdev}:1 ${fdt_addr_r} /boot/${fdtfile} ; "	\
 +		"bootm ${optee_addr_r} - ${fdt_addr_r}\0"
 +
++#define BOOTENV_NORMAL								\
++	"start_normal=" \
++		"if test ${env_stored} != 1; then setenv env_stored 1; saveenv; fi; "\
++		"echo \"*** Look for boot partition ***\" ; "\
++		"part list mmc ${mmcdev} -bootable boot_part ; "\
++		"env exists boot_part || setenv boot_part 1 ; "\
++		"echo \"*** Using partition ${boot_part} on dev ${mmcdev} ***\" ; "\
++		"ext4load mmc ${mmcdev}:${boot_part} ${load_addr} /${bootfile} ; "\
++		"bootm ${load_addr}\0"
++
 +/* Boot modes */
 +
 +#ifdef CONFIG_SYS_BOOT_MODE_UMS
 +
 +#undef CONFIG_BOOTCOMMAND
 +#define CONFIG_BOOTCOMMAND	"run start_ums"
-+
-+#elif CONFIG_SYS_BOOT_MODE_VERIFIED_OPEN
-+
-+#undef CONFIG_BOOTCOMMAND
-+#define CONFIG_BOOTCOMMAND	"run start_verified_open"
 +
 +#elif CONFIG_SYS_BOOT_MODE_TFTP
 +
@@ -1147,7 +1144,6 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +
 +#elif CONFIG_SYS_BOOT_MODE_NORMAL
 +
-+#include <config_distro_bootcmd.h>
 +#undef CONFIG_BOOTCOMMAND
 +#define CONFIG_BOOTCOMMAND	"run start_normal"
 +
@@ -1155,7 +1151,7 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +
 +#undef CONFIG_CMDLINE
 +#undef CONFIG_BOOTDELAY
-+#define CONFIG_BOOTDELAY -2
++#define CONFIG_BOOTDELAY 3
 +
 +#undef CONFIG_BOOTCOMMAND
 +#define CONFIG_BOOTCOMMAND "dummy"
@@ -1169,14 +1165,11 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +#endif
 +
 +#define CFG_EXTRA_ENV_SETTINGS			\
-+	"kernel_addr_r=0x80800000\0"		\
-+	"fdt_addr_r=0x82000000\0"		\
-+	"scriptaddr=0x80800000\0"		\
++	"load_addr=0x80800000\0"		\
 +	"ramdisk_addr_r=0x83000000\0"		\
 +	"optee_addr_r=0x83000000\0"		\
-+	"bootfile=zImage\0"			\
++	"bootfile=" USBARMORY_FIT_PATH "\0"	\
 +	"opteefile=uTee\0"			\
-+	"fdtfile=imx6ulz-usbarmory.dtb\0"	\
 +	"mmcdev=" USBARMORY_BOOT_DEV "\0"	\
 +	"ethact=usb_ether\0"			\
 +	"cdc_connect_timeout=60\0"		\
@@ -1188,7 +1181,6 @@ Subject: [PATCH] ARM: mx6: add support for USB armory Mk II board
 +	BOOTENV_OPTEE				\
 +	BOOTENV_TFTP				\
 +	BOOTENV_UMS				\
-+	BOOTENV_VERIFIED_OPEN			\
 +	BOOTENV
 +
 +/* Physical Memory Map */
