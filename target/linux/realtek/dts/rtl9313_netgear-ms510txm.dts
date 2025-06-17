@@ -1,0 +1,307 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/dts-v1/;
+
+#include "rtl931x.dtsi"
+
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	compatible = "netgear,ms510txm", "realtek,rtl838x-soc";
+	model = "Netgear MS510TXM";
+
+	chosen {
+		bootargs = "earlycon ignore_loglevel";
+	};
+
+	i2c_bus: i2c-rtl9310 {
+		compatible = "realtek,rtl9310-i2c";
+		reg = <0x1b001004 0x3c>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		sda-pin = <15>;
+		scl-pin = <13>;
+		clock-frequency = <100000>;
+	};
+
+	i2c-mux {
+		compatible = "realtek,i2c-mux-rtl9310";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		i2c-parent = <&i2c_bus>;
+
+		i2c0: i2c@0 {
+			reg = <0>;
+			scl-pin = <13>;
+			sda-pin = <16>;
+		};
+
+		i2c1: i2c@1 {
+			reg = <1>;
+			scl-pin = <13>;
+			sda-pin = <15>;
+		};
+	};
+
+	sfp0: sfp-p1 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c0>;
+		los-gpio = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+		mod-def0-gpio = <&gpio0 7 GPIO_ACTIVE_LOW>;
+		tx-disable-gpio = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+
+	};
+
+	sfp1: sfp-p2 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c1>;
+		los-gpio = <&gpio0 8 GPIO_ACTIVE_HIGH>;
+		mod-def0-gpio = <&gpio0 6 GPIO_ACTIVE_LOW>;
+		tx-disable-gpio = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+	};
+
+	led_set: led_set {
+		compatible = "realtek,rtl9300-leds";
+		active-low;
+
+		// LED set 0:
+		// Yellow: 1000M/100M
+		// Green: 2.5G
+		led_set0 = <0x0aa0 0x0a08>;
+
+		// LED set 1:
+		// Yellow: 5G/2.5G/1000M/100M
+		// Green: 10G
+		led_set1 = <0x0aaa 0x0a01>;
+
+		// LED set 2:
+		// Yellow: 1G
+		// Green: 10G
+		led_set2 = <0x0a20 0x0a01>;
+	};
+};
+
+&spi0 {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "u-boot";
+				reg = <0x0 0xe0000>;
+				read-only;
+			};
+			partition@1 {
+				label = "u-boot-env";
+				reg = <0xe0000 0x10000>;
+			};
+			partition@2 {
+				label = "u-boot-env2";
+				reg = <0xf0000 0x10000>;
+				read-only;
+			};
+			partition@3 {
+				label = "jffs2-cfg";
+				reg = <0x100000 0x100000>;
+			};
+			partition@4 {
+				label = "jffs2-log";
+				reg = <0x200000 0x100000>;
+			};
+			partition@5 {
+				label = "firmware";
+				reg = <0x300000 0xe80000>;
+			};
+			partition@6 {
+				label = "firmware2";
+				reg = <0x1180000 0xe80000>;
+			};
+		};
+	};
+};
+
+&ethernet0 {
+	mdio: mdio-bus {
+		compatible = "realtek,rtl838x-mdio";
+		regmap = <&ethernet0>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* with sds 0-7 + 10-11, lan3 works. But this doesn't match the vendor config */
+		/* with sds 2-9 + 12-13, nothing works. This is the vendor config */
+
+		/* External RTL8221B */
+		phy0: ethernet-phy@0 {
+			reg = <0>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			rtl9300,smi-address = <0 1>;
+			sds = <0>; // <2>
+		};
+		phy1: ethernet-phy@1 {
+			reg = <8>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			rtl9300,smi-address = <0 2>;
+			sds = <1>; // <3>
+		};
+		phy2: ethernet-phy@2 {
+			reg = <16>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			rtl9300,smi-address = <1 3>;
+			sds = <2>; // <4>
+		};
+		phy3: ethernet-phy@3 {
+			reg = <24>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			rtl9300,smi-address = <1 4>;
+			sds = <3>; // <5>
+		};
+
+		/* External BCM84888 */
+		/*
+		phy4: ethernet-phy@4 {
+			reg = <32>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			rtl9300,smi-address = <2 5>;
+			sds = <4>; // <6>
+		};
+		phy5: ethernet-phy@5 {
+			reg = <40>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			rtl9300,smi-address = <2 6>;
+			sds = <5>; // <7>
+		};
+		phy6: ethernet-phy@6 {
+			reg = <48>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			rtl9300,smi-address = <2 7>;
+			sds = <6>; // <8>
+		};
+		phy7: ethernet-phy@7 {
+			reg = <50>;
+			compatible = "ethernet-phy-ieee802.3-c45";
+			rtl9300,smi-address = <2 8>;
+			sds = <9>; // <9>
+		};
+		*/
+
+		/* SFPs */
+		phy8: ethernet-phy@8 {
+			reg = <54>;
+			compatible = "ethernet-phy-ieee802.3-c22";
+			phy-is-integrated;
+			sds = <10>; // <12>
+		};
+		phy9: ethernet-phy@9 {
+			reg = <55>;
+			compatible = "ethernet-phy-ieee802.3-c22";
+			phy-is-integrated;
+			sds = <11>; // <13>
+		};
+	};
+};
+
+&switch0 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			label = "lan1";
+			phy-handle = <&phy0>;
+			phy-mode = "hsgmii";
+			led-set = <0>;
+		};
+		port@8 {
+		        reg = <8>;
+        		label = "lan2";
+        		phy-handle = <&phy1>;
+        		phy-mode = "hsgmii";
+			led-set = <0>;
+		};
+		port@10 {
+			reg = <16>;
+			label = "lan3";
+			phy-handle = <&phy2>;
+			phy-mode = "hsgmii";
+			led-set = <0>;
+		};
+		port@18 {
+			reg = <24>;
+			label = "lan4";
+			phy-handle = <&phy3>;
+			phy-mode = "hsgmii";
+			led-set = <0>;
+		};
+
+		/* 10GBase-T ports */
+		/*
+		port@20 {
+			reg = <32>;
+			label = "lan5";
+			phy-handle = <&phy4>;
+			phy-mode = "usxgmii";
+			led-set = <1>;
+		};
+		port@28 {
+			reg = <40>;
+			label = "lan6";
+			phy-handle = <&phy5>;
+			phy-mode = "usxgmii";
+			led-set = <1>;
+		};
+		port@30 {
+			reg = <48>;
+			label = "lan7";
+			phy-handle = <&phy6>;
+			phy-mode = "usxgmii";
+			led-set = <1>;
+		};
+		port@32 {
+			reg = <50>;
+			label = "lan8";
+			phy-handle = <&phy7>;
+			phy-mode = "usxgmii";
+			led-set = <1>;
+		};
+		*/
+
+		/* SFP ports */
+		port@36 {
+			reg = <54>;
+			label = "lan9";
+			pseudo-phy-handle = <&phy8>;
+			phy-mode = "10gbase-r";
+			sfp = <&sfp0>;
+			managed = "in-band-status";
+			led-set = <2>;
+		};
+		port@37 {
+			reg = <55>;
+			label = "lan10";
+			pseudo-phy-handle = <&phy9>;
+			phy-mode = "10gbase-r";
+			sfp = <&sfp1>;
+			managed = "in-band-status";
+			led-set = <2>;
+		};
+
+		/* CPU port */
+		port@38 {
+			ethernet = <&ethernet0>;
+			reg = <56>;
+			phy-mode = "internal";
+			fixed-link {
+				speed = <10000>;
+				full-duplex;
+			};
+		};
+	};
+};
