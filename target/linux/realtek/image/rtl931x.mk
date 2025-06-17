@@ -1,5 +1,15 @@
 # SPDX-License-Identifier: GPL-2.0-only
 
+define Device/netgear-ms510txm
+  SOC := rtl9313
+  UIMAGE_MAGIC := 0x4E475020
+  DEVICE_VENDOR := Netgear
+  DEVICE_MODEL := MS510TXM
+  DEVICE_PACKAGES := kmod-hwmon-gpiofan kmod-thermal
+  IMAGE_SIZE := 31808k
+endef
+TARGET_DEVICES += netgear-ms510txm
+
 define Device/plasmacloud-common
   SOC := rtl9312
   UIMAGE_MAGIC := 0x93100000
@@ -44,3 +54,4 @@ define Device/xikestor_sks8300-12x-v1
         append-rootfs | pad-rootfs | append-metadata | check-size
 endef
 TARGET_DEVICES += xikestor_sks8300-12x-v1
+
