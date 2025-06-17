@@ -1,0 +1,335 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/dts-v1/;
+
+#include "rtl931x.dtsi"
+
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	compatible = "netgear,ms510txm", "realtek,rtl931x-soc";
+	model = "Netgear MS510TXM";
+
+	chosen {
+		bootargs = "earlycon ignore_loglevel";
+	};
+
+	keys {
+		compatible = "gpio-keys";
+
+		mode {
+			label = "reset";
+			gpios = <&gpio0 28 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RESTART>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		//pinctrl-names = "default";
+		//pinctrl-0 = <&pinmux_disable_sys_led>;
+
+		led_pwr_sys: led-0 {
+			color = <LED_COLOR_ID_GREEN>;
+			function = LED_FUNCTION_POWER;
+			gpios = <&gpio0 0 GPIO_ACTIVE_HIGH>;
+		};
+	};
+
+	sfp0: sfp-p1 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c1>;
+		los-gpio = <&gpio0 9 GPIO_ACTIVE_HIGH>;
+		mod-def0-gpio = <&gpio0 7 GPIO_ACTIVE_LOW>;
+		tx-disable-gpio = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+	};
+
+	sfp1: sfp-p2 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c0>;
+		los-gpio = <&gpio0 8 GPIO_ACTIVE_HIGH>;
+		mod-def0-gpio = <&gpio0 6 GPIO_ACTIVE_LOW>;
+		tx-disable-gpio = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+	};
+
+	led_set: led_set {
+		compatible = "realtek,rtl9300-leds";
+		active-low;
+
+		// LED set 0:
+		// Yellow: 1000M/100M
+		// Green: 2.5G
+		led_set0 = <0x0aa0 0x0a08>;
+
+		// LED set 1:
+		// Yellow: 5G/2.5G/1000M/100M
+		// Green: 10G
+		led_set1 = <0x0aaa 0x0a01>;
+
+		// LED set 2:
+		// Yellow: 1G
+		// Green: 10G
+		led_set2 = <0x0a20 0x0a01>;
+	};
+};
+
+&i2c_mst1 {
+	status = "okay";
+
+	i2c0: i2c@0 {
+		reg = <0>;
+	};
+	i2c1: i2c@1 {
+		reg = <1>;
+	};
+};
+
+&spi0 {
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "u-boot";
+				reg = <0x0 0xe0000>;
+				read-only;
+			};
+			partition@1 {
+				label = "u-boot-env";
+				reg = <0xe0000 0x10000>;
+			};
+			partition@2 {
+				label = "u-boot-env2";
+				reg = <0xf0000 0x10000>;
+				read-only;
+			};
+			partition@3 {
+				label = "jffs2-cfg";
+				reg = <0x100000 0x100000>;
+			};
+			partition@4 {
+				label = "jffs2-log";
+				reg = <0x200000 0x100000>;
+			};
+			partition@5 {
+				label = "firmware";
+				reg = <0x300000 0xe80000>;
+			};
+			partition@6 {
+				label = "firmware2";
+				reg = <0x1180000 0xe80000>;
+			};
+		};
+	};
+};
+
+&mdio_bus0 {
+
+	/* External RTL8221Bs */
+	phy0: ethernet-phy@0 {
+		reg = <0>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <1>;
+	};
+	phy8: ethernet-phy@8 {
+		reg = <8>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <2>;
+	};
+};
+
+&mdio_bus1 {
+	phy16: ethernet-phy@16 {
+		reg = <16>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <3>;
+	};
+	phy24: ethernet-phy@24 {
+		reg = <24>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <4>;
+	};
+};
+
+&mdio_bus2 {
+	/* External BCM84888 */
+	phy32: ethernet-phy@32 {
+		reg = <32>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <5>;
+	};
+	phy40: ethernet-phy@40 {
+		reg = <40>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <6>;
+	};
+	phy48: ethernet-phy@48 {
+		reg = <48>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <7>;
+	};
+	phy50: ethernet-phy@50 {
+		reg = <50>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <8>;
+	};
+};
+
+&switch0 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* RTL8221B 2.5GBase-T ports */
+		port0: port@0 {
+			reg = <0>;
+			label = "lan1";
+			led-set = <0>;
+			managed = "in-band-status";
+			pcs-handle = <&serdes2>;
+			phy-handle = <&phy0>;
+			phy-mode = "sgmii";
+		};
+		port8: port@8 {
+			reg = <8>;
+			label = "lan2";
+			led-set = <0>;
+			managed = "in-band-status";
+			pcs-handle = <&serdes3>;
+			phy-handle = <&phy8>;
+			phy-mode = "sgmii";
+		};
+		port16: port@16 {
+			reg = <16>;
+			label = "lan3";
+			led-set = <0>;
+			managed = "in-band-status";
+			pcs-handle = <&serdes4>;
+			phy-handle = <&phy16>;
+			phy-mode = "sgmii";
+		};
+		port24: port@24 {
+			reg = <24>;
+			label = "lan4";
+			led-set = <0>;
+			managed = "in-band-status";
+			pcs-handle = <&serdes5>;
+			phy-handle = <&phy24>;
+			phy-mode = "sgmii";
+		};
+
+		/* 10GBase-T ports */
+		port32: port@32 {
+			reg = <32>;
+			label = "lan5";
+			led-set = <1>;
+			pcs-handle = <&serdes6>;
+			phy-handle = <&phy32>;
+			phy-mode = "usxgmii";
+		};
+		port40: port@40 {
+			reg = <40>;
+			label = "lan6";
+			led-set = <1>;
+			pcs-handle = <&serdes7>;
+			phy-handle = <&phy40>;
+			phy-mode = "usxgmii";
+		};
+		port48: port@48 {
+			reg = <48>;
+			label = "lan7";
+			led-set = <1>;
+			pcs-handle = <&serdes8>;
+			phy-handle = <&phy48>;
+			phy-mode = "usxgmii";
+		};
+		port50: port@50 {
+			reg = <50>;
+			label = "lan8";
+			led-set = <1>;
+			pcs-handle = <&serdes9>;
+			phy-handle = <&phy50>;
+			phy-mode = "usxgmii";
+		};
+
+		/* SFP ports */
+		port54: port@54 {
+			reg = <54>;
+			label = "lan9";
+			led-set = <2>;
+			managed = "in-band-status";
+			pcs-handle = <&serdes12>;
+			phy-mode = "1000base-x";
+			sfp = <&sfp0>;
+		};
+		port55: port@55 {
+			reg = <55>;
+			label = "lan10";
+			led-set = <2>;
+			managed = "in-band-status";
+			pcs-handle = <&serdes13>;
+			phy-mode = "1000base-x";
+			sfp = <&sfp1>;
+		};
+
+		/* CPU port */
+		port@56 {
+			ethernet = <&ethernet0>;
+			reg = <56>;
+			phy-mode = "internal";
+			fixed-link {
+				speed = <1000>;
+				full-duplex;
+			};
+		};
+	};
+};
+
+&serdes2 {
+	realtek,pnswap-tx;
+};
+
+&serdes3 {
+	realtek,pnswap-tx;
+};
+
+&serdes4 {
+	realtek,pnswap-tx;
+};
+
+&serdes5 {
+	realtek,pnswap-tx;
+};
+
+&serdes6 {
+	realtek,pnswap-rx;
+};
+
+&serdes7 {
+	realtek,pnswap-tx;
+};
+
+&serdes8 {
+	realtek,pnswap-rx;
+};
+
+&serdes9 {
+	realtek,pnswap-tx;
+};
+
+&serdes12 {
+	realtek,pnswap-tx;
+};
+
+&serdes13 {
+	realtek,pnswap-tx;
+};
