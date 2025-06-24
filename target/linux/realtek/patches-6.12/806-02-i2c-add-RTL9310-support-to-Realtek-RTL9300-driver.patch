@@ -1,0 +1,619 @@
+From f471718472cc884020cd5b97a8777eb4e8e5cf69 Mon Sep 17 00:00:00 2001
+From: Jonas Jelonek <jelonek.jonas@gmail.com>
+Date: Thu, 26 Jun 2025 11:32:57 +0000
+Subject: [PATCH 2/2] i2c: add RTL9310 support to Realtek RTL9300 driver
+
+This adds support for Realtek RTL9310 series to the I2C driver for the
+RTL9300 I2C controller.
+
+The I2C controller in RTL9310 SoCs differs from the one in RTL9300 by a
+slightly different register layout, that it supports 12 instead of 8
+channels/SDA lines and it uses GPIO13 and GPIO14 as SCL lines.
+
+A new property 'realtek,mst-id' is added to the device-tree binding to
+tell the driver which master is used. This is required because
+activating the SCL line is done in a global register - contrast to a
+local register in RTL9300.
+
+This also slightly adjusts the RTL9300 part of the driver for
+improvements, and in general does some renaming to reflect that it's not
+just for RTL9300.
+
+Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
+
+diff --git a/drivers/i2c/busses/i2c-rtl9300.c b/drivers/i2c/busses/i2c-rtl9300.c
+index e02a8ba40f6f..c87ee1c3d7e8 100644
+--- a/drivers/i2c/busses/i2c-rtl9300.c
++++ b/drivers/i2c/busses/i2c-rtl9300.c
+@@ -9,31 +9,48 @@
+ #include <linux/platform_device.h>
+ #include <linux/regmap.h>
+ 
+-enum rtl9300_bus_freq {
+-	RTL9300_I2C_STD_FREQ,
+-	RTL9300_I2C_FAST_FREQ,
++enum rtl93xx_bus_freq {
++	RTL93XX_I2C_STD_FREQ,
++	RTL93XX_I2C_FAST_FREQ,
+ };
+ 
+-struct rtl9300_i2c;
++struct rtl93xx_i2c;
+ 
+-struct rtl9300_i2c_chan {
++struct rtl93xx_i2c_chan {
+ 	struct i2c_adapter adap;
+-	struct rtl9300_i2c *i2c;
+-	enum rtl9300_bus_freq bus_freq;
++	struct rtl93xx_i2c *i2c;
++	enum rtl93xx_bus_freq bus_freq;
+ 	u8 sda_pin;
+ };
+ 
+-#define RTL9300_I2C_MUX_NCHAN	8
++struct rtl93xx_i2c_drv_data {
++	int (*config_io)(struct rtl93xx_i2c *i2c, u8 sda_pin);
++	int (*config_xfer)(struct rtl93xx_i2c *i2c,
++			   struct rtl93xx_i2c_chan *chan, u16 addr,
++			   u16 len);
++	int (*execute_xfer)(struct rtl93xx_i2c *i2c, char read_write,
++			    int size, union i2c_smbus_data *data, int len);
++	int (*read)(struct rtl93xx_i2c *i2c, u8 *buf, int len);
++	int (*reg_addr_set)(struct rtl93xx_i2c *i2c, u32 reg, u16 len);
++	int (*write)(struct rtl93xx_i2c *i2c, u8 *buf, int len);
++	int (*writel)(struct rtl93xx_i2c *i2c, u32 data);
++	u8 max_nchan;
++};
++
++#define RTL9300_I2C_MUX_NCHAN   8
++#define RTL9310_I2C_MUX_NCHAN	12
+ 
+-struct rtl9300_i2c {
++struct rtl93xx_i2c {
+ 	struct regmap *regmap;
+ 	struct device *dev;
+-	struct rtl9300_i2c_chan chans[RTL9300_I2C_MUX_NCHAN];
++	struct rtl93xx_i2c_chan chans[RTL9310_I2C_MUX_NCHAN];
+ 	u32 reg_base;
+ 	u8 sda_pin;
++	u8 mst_id;
+ 	struct mutex lock;
+ };
+ 
++
+ #define RTL9300_I2C_MST_CTRL1				0x0
+ #define  RTL9300_I2C_MST_CTRL1_MEM_ADDR_OFS		8
+ #define  RTL9300_I2C_MST_CTRL1_MEM_ADDR_MASK		GENMASK(31, 8)
+@@ -60,7 +77,38 @@ struct rtl9300_i2c {
+ 
+ #define RTL9300_I2C_MST_GLB_CTRL			0x384
+ 
+-static int rtl9300_i2c_reg_addr_set(struct rtl9300_i2c *i2c, u32 reg, u16 len)
++
++#define RTL9310_I2C_MST_IF_CTRL				0x1004
++#define RTL9310_I2C_MST_IF_SEL				0x1008
++/* SCL0 is GPIO13, SCL1 is GPIO14 */
++#define  RTL9310_I2C_MST_IF_SEL_GPIO_SCL1_SEL		BIT(13)
++#define  RTL9310_I2C_MST_IF_SEL_GPIO_SCL0_SEL		BIT(12)
++#define  RTL9310_I2C_MST_IF_SEL_GPIO_SDA_SEL_OFS	0
++#define  RTL9310_I2C_MST_IF_SEL_GPIO_SDA_SEL_MASK	GENMASK(11, 0)
++
++#define RTL9310_I2C_MST_CTRL				0x0
++#define  RTL9310_I2C_MST_CTRL_SCL_FREQ_OFS		30
++#define  RTL9310_I2C_MST_CTRL_SCL_FREQ_MASK		GENMASK(31, 30)
++#define  RTL9310_I2C_MST_CTRL_SDA_OUT_SEL_OFS		18
++#define  RTL9310_I2C_MST_CTRL_SDA_OUT_SEL_MASK		GENMASK(21, 18)
++#define  RTL9310_I2C_MST_CTRL_DEV_ADDR_OFS		11
++#define  RTL9310_I2C_MST_CTRL_DEV_ADDR_MASK		GENMASK(17, 11)
++#define  RTL9310_I2C_MST_CTRL_MEMADDR_WIDTH_OFS		9
++#define  RTL9310_I2C_MST_CTRL_MEMADDR_WIDTH_MASK	GENMASK(10, 9)
++#define  RTL9310_I2C_MST_CTRL_DATA_WIDTH_OFS		5
++#define  RTL9310_I2C_MST_CTRL_DATA_WIDTH_MASK		GENMASK(8, 5)
++#define  RTL9310_I2C_MST_CTRL_RD_MODE			BIT(4)
++#define  RTL9310_I2C_MST_CTRL_RWOP			BIT(2)
++#define  RTL9310_I2C_MST_CTRL_FAIL			BIT(1)
++#define  RTL9310_I2C_MST_CTRL_TRIG			BIT(0)
++#define RTL9310_I2C_MST_MEMADDR_CTRL			0x4
++#define  RTL9310_I2C_MST_MEMADDR_OFS			0x0
++#define  RTL9310_I2C_MST_MEMADDR_MASK			GENMASK(23, 0)
++#define	RTL9310_I2C_MST_DATA_CTRL			0x8
++
++#define MST_REG(i2c, x)					((i2c)->reg_base + (x))
++
++static int rtl9300_i2c_reg_addr_set(struct rtl93xx_i2c *i2c, u32 reg, u16 len)
+ {
+ 	u32 val, mask;
+ 	int ret;
+@@ -68,17 +116,35 @@ static int rtl9300_i2c_reg_addr_set(struct rtl9300_i2c *i2c, u32 reg, u16 len)
+ 	val = len << RTL9300_I2C_MST_CTRL2_MEM_ADDR_WIDTH_OFS;
+ 	mask = RTL9300_I2C_MST_CTRL2_MEM_ADDR_WIDTH_MASK;
+ 
+-	ret = regmap_update_bits(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_CTRL2, mask, val);
++	ret = regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9300_I2C_MST_CTRL2), mask, val);
+ 	if (ret)
+ 		return ret;
+ 
+ 	val = reg << RTL9300_I2C_MST_CTRL1_MEM_ADDR_OFS;
+ 	mask = RTL9300_I2C_MST_CTRL1_MEM_ADDR_MASK;
+ 
+-	return regmap_update_bits(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_CTRL1, mask, val);
++	return regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9300_I2C_MST_CTRL1), mask, val);
+ }
+ 
+-static int rtl9300_i2c_config_io(struct rtl9300_i2c *i2c, u8 sda_pin)
++static int rtl9310_i2c_reg_addr_set(struct rtl93xx_i2c *i2c, u32 reg, u16 len)
++{
++	u32 val, mask;
++	int ret;
++
++	val = len << RTL9310_I2C_MST_CTRL_MEMADDR_WIDTH_OFS;
++	mask = RTL9310_I2C_MST_CTRL_MEMADDR_WIDTH_MASK;
++
++	ret = regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_CTRL), mask, val);
++	if (ret)
++		return ret;
++
++	val = reg << RTL9310_I2C_MST_MEMADDR_OFS;
++	mask = RTL9310_I2C_MST_MEMADDR_MASK;
++
++	return regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_MEMADDR_CTRL), mask, val);
++}
++
++static int rtl9300_i2c_config_io(struct rtl93xx_i2c *i2c, u8 sda_pin)
+ {
+ 	int ret;
+ 	u32 val, mask;
+@@ -91,10 +157,30 @@ static int rtl9300_i2c_config_io(struct rtl9300_i2c *i2c, u8 sda_pin)
+ 		RTL9300_I2C_MST_CTRL1_GPIO_SCL_SEL;
+ 	mask = RTL9300_I2C_MST_CTRL1_SDA_OUT_SEL_MASK | RTL9300_I2C_MST_CTRL1_GPIO_SCL_SEL;
+ 
+-	return regmap_update_bits(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_CTRL1, mask, val);
++	return regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9300_I2C_MST_CTRL1), mask, val);
++}
++
++static int rtl9310_i2c_config_io(struct rtl93xx_i2c *i2c, u8 sda_pin)
++{
++	u32 val, mask;
++	int ret;
++
++	if (i2c->mst_id == 2)
++		val = mask = BIT(sda_pin) | RTL9310_I2C_MST_IF_SEL_GPIO_SCL1_SEL;
++	else
++		val = mask = BIT(sda_pin) | RTL9310_I2C_MST_IF_SEL_GPIO_SCL0_SEL;
++
++	ret = regmap_update_bits(i2c->regmap, RTL9310_I2C_MST_IF_SEL, mask, val);
++	if (ret)
++		return ret;
++
++	val = (sda_pin << RTL9310_I2C_MST_CTRL_SDA_OUT_SEL_OFS);
++	mask = RTL9310_I2C_MST_CTRL_SDA_OUT_SEL_MASK;
++
++	return regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_CTRL), mask, val);
+ }
+ 
+-static int rtl9300_i2c_config_xfer(struct rtl9300_i2c *i2c, struct rtl9300_i2c_chan *chan,
++static int rtl9300_i2c_config_xfer(struct rtl93xx_i2c *i2c, struct rtl93xx_i2c_chan *chan,
+ 				   u16 addr, u16 len)
+ {
+ 	u32 val, mask;
+@@ -110,10 +196,29 @@ static int rtl9300_i2c_config_xfer(struct rtl9300_i2c *i2c, struct rtl9300_i2c_c
+ 
+ 	mask |= RTL9300_I2C_MST_CTRL2_RD_MODE;
+ 
+-	return regmap_update_bits(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_CTRL2, mask, val);
++	return regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9300_I2C_MST_CTRL2), mask, val);
+ }
+ 
+-static int rtl9300_i2c_read(struct rtl9300_i2c *i2c, u8 *buf, int len)
++static int rtl9310_i2c_config_xfer(struct rtl93xx_i2c *i2c, struct rtl93xx_i2c_chan *chan,
++				   u16 addr, u16 len)
++{
++	u32 val, mask;
++
++	val = chan->bus_freq << RTL9310_I2C_MST_CTRL_SCL_FREQ_OFS;
++	mask = RTL9310_I2C_MST_CTRL_SCL_FREQ_MASK;
++
++	val |= addr << RTL9310_I2C_MST_CTRL_DEV_ADDR_OFS;
++	mask |= RTL9310_I2C_MST_CTRL_DEV_ADDR_MASK;
++
++	val |= ((len - 1) & 0xf) << RTL9310_I2C_MST_CTRL_DATA_WIDTH_OFS;
++	mask |= RTL9310_I2C_MST_CTRL_DATA_WIDTH_MASK;
++
++	mask |= RTL9310_I2C_MST_CTRL_RD_MODE;
++
++	return regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_CTRL), mask, val);
++}
++
++static int i2c_read(struct rtl93xx_i2c *i2c, u8 reg, u8 *buf, int len)
+ {
+ 	u32 vals[4] = {};
+ 	int i, ret;
+@@ -121,8 +226,7 @@ static int rtl9300_i2c_read(struct rtl9300_i2c *i2c, u8 *buf, int len)
+ 	if (len > 16)
+ 		return -EIO;
+ 
+-	ret = regmap_bulk_read(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_DATA_WORD0,
+-			       vals, ARRAY_SIZE(vals));
++	ret = regmap_bulk_read(i2c->regmap, reg, vals, ARRAY_SIZE(vals));
+ 	if (ret)
+ 		return ret;
+ 
+@@ -134,7 +238,17 @@ static int rtl9300_i2c_read(struct rtl9300_i2c *i2c, u8 *buf, int len)
+ 	return 0;
+ }
+ 
+-static int rtl9300_i2c_write(struct rtl9300_i2c *i2c, u8 *buf, int len)
++static int rtl9300_i2c_read(struct rtl93xx_i2c *i2c, u8 *buf, int len)
++{
++	return i2c_read(i2c, MST_REG(i2c, RTL9300_I2C_MST_DATA_WORD0), buf, len);
++}
++
++static int rtl9310_i2c_read(struct rtl93xx_i2c *i2c, u8 *buf, int len)
++{
++	return i2c_read(i2c, MST_REG(i2c, RTL9310_I2C_MST_DATA_CTRL), buf, len);
++}
++
++static int i2c_write(struct rtl93xx_i2c *i2c, u8 reg, u8 *buf, int len)
+ {
+ 	u32 vals[4] = {};
+ 	int i;
+@@ -149,16 +263,30 @@ static int rtl9300_i2c_write(struct rtl9300_i2c *i2c, u8 *buf, int len)
+ 		vals[i/4] |= buf[i];
+ 	}
+ 
+-	return regmap_bulk_write(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_DATA_WORD0,
+-				vals, ARRAY_SIZE(vals));
++	return regmap_bulk_write(i2c->regmap, reg, vals, ARRAY_SIZE(vals));
+ }
+ 
+-static int rtl9300_i2c_writel(struct rtl9300_i2c *i2c, u32 data)
++static int rtl9300_i2c_write(struct rtl93xx_i2c *i2c, u8 *buf, int len)
+ {
+-	return regmap_write(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_DATA_WORD0, data);
++	return i2c_write(i2c, MST_REG(i2c, RTL9300_I2C_MST_DATA_WORD0), buf, len);
+ }
+ 
+-static int rtl9300_i2c_execute_xfer(struct rtl9300_i2c *i2c, char read_write,
++static int rtl9310_i2c_write(struct rtl93xx_i2c *i2c, u8 *buf, int len)
++{
++	return i2c_write(i2c, MST_REG(i2c, RTL9310_I2C_MST_DATA_CTRL), buf, len);
++}
++
++static int rtl9300_i2c_writel(struct rtl93xx_i2c *i2c, u32 data)
++{
++	return regmap_write(i2c->regmap, MST_REG(i2c, RTL9300_I2C_MST_DATA_WORD0), data);
++}
++
++static int rtl9310_i2c_writel(struct rtl93xx_i2c *i2c, u32 data)
++{
++	return regmap_write(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_DATA_CTRL), data);
++}
++
++static int rtl9300_i2c_execute_xfer(struct rtl93xx_i2c *i2c, char read_write,
+ 				    int size, union i2c_smbus_data *data, int len)
+ {
+ 	u32 val, mask;
+@@ -170,11 +298,11 @@ static int rtl9300_i2c_execute_xfer(struct rtl9300_i2c *i2c, char read_write,
+ 	val |= RTL9300_I2C_MST_CTRL1_I2C_TRIG;
+ 	mask |= RTL9300_I2C_MST_CTRL1_I2C_TRIG;
+ 
+-	ret = regmap_update_bits(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_CTRL1, mask, val);
++	ret = regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9300_I2C_MST_CTRL1), mask, val);
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = regmap_read_poll_timeout(i2c->regmap, i2c->reg_base + RTL9300_I2C_MST_CTRL1,
++	ret = regmap_read_poll_timeout(i2c->regmap, MST_REG(i2c, RTL9300_I2C_MST_CTRL1),
+ 				       val, !(val & RTL9300_I2C_MST_CTRL1_I2C_TRIG), 100, 2000);
+ 	if (ret)
+ 		return ret;
+@@ -185,13 +313,13 @@ static int rtl9300_i2c_execute_xfer(struct rtl9300_i2c *i2c, char read_write,
+ 	if (read_write == I2C_SMBUS_READ) {
+ 		if (size == I2C_SMBUS_BYTE || size == I2C_SMBUS_BYTE_DATA) {
+ 			ret = regmap_read(i2c->regmap,
+-					  i2c->reg_base + RTL9300_I2C_MST_DATA_WORD0, &val);
++					  MST_REG(i2c, RTL9300_I2C_MST_DATA_WORD0), &val);
+ 			if (ret)
+ 				return ret;
+ 			data->byte = val & 0xff;
+ 		} else if (size == I2C_SMBUS_WORD_DATA) {
+ 			ret = regmap_read(i2c->regmap,
+-					  i2c->reg_base + RTL9300_I2C_MST_DATA_WORD0, &val);
++					  MST_REG(i2c, RTL9300_I2C_MST_DATA_WORD0), &val);
+ 			if (ret)
+ 				return ret;
+ 			data->word = val & 0xffff;
+@@ -205,17 +333,67 @@ static int rtl9300_i2c_execute_xfer(struct rtl9300_i2c *i2c, char read_write,
+ 	return 0;
+ }
+ 
+-static int rtl9300_i2c_smbus_xfer(struct i2c_adapter *adap, u16 addr, unsigned short flags,
++static int rtl9310_i2c_execute_xfer(struct rtl93xx_i2c *i2c, char read_write,
++				    int size, union i2c_smbus_data *data, int len)
++{
++	u32 val, mask;
++	int ret;
++
++	val = read_write == I2C_SMBUS_WRITE ? RTL9310_I2C_MST_CTRL_RWOP : 0;
++	mask = RTL9310_I2C_MST_CTRL_RWOP;
++
++	val |= RTL9310_I2C_MST_CTRL_TRIG;
++	mask |= RTL9310_I2C_MST_CTRL_TRIG;
++
++	ret = regmap_update_bits(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_CTRL), mask, val);
++	if (ret)
++		return ret;
++
++	ret = regmap_read_poll_timeout(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_CTRL), val,
++				       !(val & RTL9310_I2C_MST_CTRL_TRIG), 100, 2000);
++	if (ret)
++		return ret;
++
++	if (val & RTL9310_I2C_MST_CTRL_FAIL)
++		return -EIO;
++
++	if (read_write == I2C_SMBUS_READ) {
++		if (size == I2C_SMBUS_BYTE || size == I2C_SMBUS_BYTE_DATA) {
++			ret = regmap_read(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_DATA_CTRL),
++					  &val);
++			if (ret)
++				return ret;
++
++			data->byte = val & 0xff;
++		} else if (size == I2C_SMBUS_WORD_DATA) {
++			ret = regmap_read(i2c->regmap, MST_REG(i2c, RTL9310_I2C_MST_DATA_CTRL),
++					  &val);
++			if (ret)
++				return ret;
++
++			data->word = val & 0xffff;
++		} else {
++			ret = rtl9310_i2c_read(i2c, &data->block[0], len);
++			if (ret)
++				return ret;
++		}
++	}
++
++	return 0;
++}
++
++static int rtl93xx_i2c_smbus_xfer(struct i2c_adapter *adap, u16 addr, unsigned short flags,
+ 				  char read_write, u8 command, int size,
+ 				  union i2c_smbus_data *data)
+ {
+-	struct rtl9300_i2c_chan *chan = i2c_get_adapdata(adap);
+-	struct rtl9300_i2c *i2c = chan->i2c;
++	struct rtl93xx_i2c_chan *chan = i2c_get_adapdata(adap);
++	struct rtl93xx_i2c *i2c = chan->i2c;
++	struct rtl93xx_i2c_drv_data *drv_data = (struct rtl93xx_i2c_drv_data *)device_get_match_data(i2c->dev);
+ 	int len = 0, ret;
+ 
+ 	mutex_lock(&i2c->lock);
+ 	if (chan->sda_pin != i2c->sda_pin) {
+-		ret = rtl9300_i2c_config_io(i2c, chan->sda_pin);
++		ret = drv_data->config_io(i2c, chan->sda_pin);
+ 		if (ret)
+ 			goto out_unlock;
+ 		i2c->sda_pin = chan->sda_pin;
+@@ -223,69 +401,69 @@ static int rtl9300_i2c_smbus_xfer(struct i2c_adapter *adap, u16 addr, unsigned s
+ 
+ 	switch (size) {
+ 	case I2C_SMBUS_QUICK:
+-		ret = rtl9300_i2c_config_xfer(i2c, chan, addr, 0);
++		ret = drv_data->config_xfer(i2c, chan, addr, 0);
+ 		if (ret)
+ 			goto out_unlock;
+-		ret = rtl9300_i2c_reg_addr_set(i2c, 0, 0);
++		ret = drv_data->reg_addr_set(i2c, 0, 0);
+ 		if (ret)
+ 			goto out_unlock;
+ 		break;
+ 
+ 	case I2C_SMBUS_BYTE:
+ 		if (read_write == I2C_SMBUS_WRITE) {
+-			ret = rtl9300_i2c_config_xfer(i2c, chan, addr, 0);
++			ret = drv_data->config_xfer(i2c, chan, addr, 0);
+ 			if (ret)
+ 				goto out_unlock;
+-			ret = rtl9300_i2c_reg_addr_set(i2c, command, 1);
++			ret = drv_data->reg_addr_set(i2c, command, 1);
+ 			if (ret)
+ 				goto out_unlock;
+ 		} else {
+-			ret = rtl9300_i2c_config_xfer(i2c, chan, addr, 1);
++			ret = drv_data->config_xfer(i2c, chan, addr, 1);
+ 			if (ret)
+ 				goto out_unlock;
+-			ret = rtl9300_i2c_reg_addr_set(i2c, 0, 0);
++			ret = drv_data->reg_addr_set(i2c, 0, 0);
+ 			if (ret)
+ 				goto out_unlock;
+ 		}
+ 		break;
+ 
+ 	case I2C_SMBUS_BYTE_DATA:
+-		ret = rtl9300_i2c_reg_addr_set(i2c, command, 1);
++		ret = drv_data->reg_addr_set(i2c, command, 1);
+ 		if (ret)
+ 			goto out_unlock;
+-		ret = rtl9300_i2c_config_xfer(i2c, chan, addr, 1);
++		ret = drv_data->config_xfer(i2c, chan, addr, 1);
+ 		if (ret)
+ 			goto out_unlock;
+ 		if (read_write == I2C_SMBUS_WRITE) {
+-			ret = rtl9300_i2c_writel(i2c, data->byte);
++			ret = drv_data->writel(i2c, data->byte);
+ 			if (ret)
+ 				goto out_unlock;
+ 		}
+ 		break;
+ 
+ 	case I2C_SMBUS_WORD_DATA:
+-		ret = rtl9300_i2c_reg_addr_set(i2c, command, 1);
++		ret = drv_data->reg_addr_set(i2c, command, 1);
+ 		if (ret)
+ 			goto out_unlock;
+-		ret = rtl9300_i2c_config_xfer(i2c, chan, addr, 2);
++		ret = drv_data->config_xfer(i2c, chan, addr, 2);
+ 		if (ret)
+ 			goto out_unlock;
+ 		if (read_write == I2C_SMBUS_WRITE) {
+-			ret = rtl9300_i2c_writel(i2c, data->word);
++			ret = drv_data->writel(i2c, data->word);
+ 			if (ret)
+ 				goto out_unlock;
+ 		}
+ 		break;
+ 
+ 	case I2C_SMBUS_BLOCK_DATA:
+-		ret = rtl9300_i2c_reg_addr_set(i2c, command, 1);
++		ret = drv_data->reg_addr_set(i2c, command, 1);
+ 		if (ret)
+ 			goto out_unlock;
+-		ret = rtl9300_i2c_config_xfer(i2c, chan, addr, data->block[0]);
++		ret = drv_data->config_xfer(i2c, chan, addr, data->block[0]);
+ 		if (ret)
+ 			goto out_unlock;
+ 		if (read_write == I2C_SMBUS_WRITE) {
+-			ret = rtl9300_i2c_write(i2c, &data->block[1], data->block[0]);
++			ret = drv_data->write(i2c, &data->block[1], data->block[0]);
+ 			if (ret)
+ 				goto out_unlock;
+ 		}
+@@ -298,7 +476,7 @@ static int rtl9300_i2c_smbus_xfer(struct i2c_adapter *adap, u16 addr, unsigned s
+ 		goto out_unlock;
+ 	}
+ 
+-	ret = rtl9300_i2c_execute_xfer(i2c, read_write, size, data, len);
++	ret = drv_data->execute_xfer(i2c, read_write, size, data, len);
+ 
+ out_unlock:
+ 	mutex_unlock(&i2c->lock);
+@@ -306,31 +484,54 @@ static int rtl9300_i2c_smbus_xfer(struct i2c_adapter *adap, u16 addr, unsigned s
+ 	return ret;
+ }
+ 
+-static u32 rtl9300_i2c_func(struct i2c_adapter *a)
++static u32 rtl93xx_i2c_func(struct i2c_adapter *a)
+ {
+ 	return I2C_FUNC_SMBUS_QUICK | I2C_FUNC_SMBUS_BYTE |
+ 	       I2C_FUNC_SMBUS_BYTE_DATA | I2C_FUNC_SMBUS_WORD_DATA |
+ 	       I2C_FUNC_SMBUS_BLOCK_DATA;
+ }
+ 
+-static const struct i2c_algorithm rtl9300_i2c_algo = {
+-	.smbus_xfer	= rtl9300_i2c_smbus_xfer,
+-	.functionality	= rtl9300_i2c_func,
++static const struct i2c_algorithm rtl93xx_i2c_algo = {
++	.smbus_xfer	= rtl93xx_i2c_smbus_xfer,
++	.functionality	= rtl93xx_i2c_func,
+ };
+ 
+-static struct i2c_adapter_quirks rtl9300_i2c_quirks = {
++static struct i2c_adapter_quirks rtl93xx_i2c_quirks = {
+ 	.flags		= I2C_AQ_NO_CLK_STRETCH,
+ 	.max_read_len	= 16,
+ 	.max_write_len	= 16,
+ };
+ 
++static struct rtl93xx_i2c_drv_data rtl9300_i2c_drv_data = {
++	.config_io = rtl9300_i2c_config_io,
++	.config_xfer = rtl9300_i2c_config_xfer,
++	.execute_xfer = rtl9300_i2c_execute_xfer,
++	.read = rtl9300_i2c_read,
++	.reg_addr_set = rtl9300_i2c_reg_addr_set,
++	.write = rtl9300_i2c_write,
++	.writel = rtl9300_i2c_writel,
++	.max_nchan = RTL9300_I2C_MUX_NCHAN,
++};
++
++static struct rtl93xx_i2c_drv_data rtl9310_i2c_drv_data = {
++	.config_io = rtl9310_i2c_config_io,
++	.config_xfer = rtl9310_i2c_config_xfer,
++	.execute_xfer = rtl9310_i2c_execute_xfer,
++	.read = rtl9310_i2c_read,
++	.reg_addr_set = rtl9310_i2c_reg_addr_set,
++	.write = rtl9310_i2c_write,
++	.writel = rtl9310_i2c_writel,
++	.max_nchan = RTL9310_I2C_MUX_NCHAN,
++};
++
+ static int rtl9300_i2c_probe(struct platform_device *pdev)
+ {
+ 	struct device *dev = &pdev->dev;
+-	struct rtl9300_i2c *i2c;
++	struct rtl93xx_i2c *i2c;
+ 	u32 clock_freq, sda_pin;
+ 	int ret, i = 0;
+ 	struct fwnode_handle *child;
++	struct rtl93xx_i2c_drv_data *drv_data;
+ 
+ 	i2c = devm_kzalloc(dev, sizeof(*i2c), GFP_KERNEL);
+ 	if (!i2c)
+@@ -347,13 +548,18 @@ static int rtl9300_i2c_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		return ret;
+ 
++	ret = device_property_read_u8(dev, "realtek,mst-id", &i2c->mst_id);
++	if (ret || (i2c->mst_id != 1 && i2c->mst_id != 2))
++		i2c->mst_id = 1;
++
+ 	platform_set_drvdata(pdev, i2c);
+ 
+-	if (device_get_child_node_count(dev) >= RTL9300_I2C_MUX_NCHAN)
++	drv_data = (struct rtl93xx_i2c_drv_data *)device_get_match_data(i2c->dev);
++	if (device_get_child_node_count(dev) >= drv_data->max_nchan)
+ 		return dev_err_probe(dev, -EINVAL, "Too many channels\n");
+ 
+ 	device_for_each_child_node(dev, child) {
+-		struct rtl9300_i2c_chan *chan = &i2c->chans[i];
++		struct rtl93xx_i2c_chan *chan = &i2c->chans[i];
+ 		struct i2c_adapter *adap = &chan->adap;
+ 
+ 		ret = fwnode_property_read_u32(child, "reg", &sda_pin);
+@@ -366,11 +572,11 @@ static int rtl9300_i2c_probe(struct platform_device *pdev)
+ 
+ 		switch (clock_freq) {
+ 		case I2C_MAX_STANDARD_MODE_FREQ:
+-			chan->bus_freq = RTL9300_I2C_STD_FREQ;
++			chan->bus_freq = RTL93XX_I2C_STD_FREQ;
+ 			break;
+ 
+ 		case I2C_MAX_FAST_MODE_FREQ:
+-			chan->bus_freq = RTL9300_I2C_FAST_FREQ;
++			chan->bus_freq = RTL93XX_I2C_FAST_FREQ;
+ 			break;
+ 		default:
+ 			dev_warn(i2c->dev, "SDA%d clock-frequency %d not supported using default\n",
+@@ -382,8 +588,8 @@ static int rtl9300_i2c_probe(struct platform_device *pdev)
+ 		chan->i2c = i2c;
+ 		adap = &i2c->chans[i].adap;
+ 		adap->owner = THIS_MODULE;
+-		adap->algo = &rtl9300_i2c_algo;
+-		adap->quirks = &rtl9300_i2c_quirks;
++		adap->algo = &rtl93xx_i2c_algo;
++		adap->quirks = &rtl93xx_i2c_quirks;
+ 		adap->retries = 3;
+ 		adap->dev.parent = dev;
+ 		i2c_set_adapdata(adap, chan);
+@@ -401,11 +607,12 @@ static int rtl9300_i2c_probe(struct platform_device *pdev)
+ }
+ 
+ static const struct of_device_id i2c_rtl9300_dt_ids[] = {
+-	{ .compatible = "realtek,rtl9300-i2c" },
+-	{ .compatible = "realtek,rtl9301-i2c" },
+-	{ .compatible = "realtek,rtl9302b-i2c" },
+-	{ .compatible = "realtek,rtl9302c-i2c" },
+-	{ .compatible = "realtek,rtl9303-i2c" },
++	{ .compatible = "realtek,rtl9300-i2c", .data = (void *) &rtl9300_i2c_drv_data },
++	{ .compatible = "realtek,rtl9301-i2c", .data = (void *) &rtl9300_i2c_drv_data },
++	{ .compatible = "realtek,rtl9302b-i2c", .data = (void *) &rtl9300_i2c_drv_data },
++	{ .compatible = "realtek,rtl9302c-i2c", .data = (void *) &rtl9300_i2c_drv_data },
++	{ .compatible = "realtek,rtl9303-i2c", .data = (void *) &rtl9300_i2c_drv_data },
++	{ .compatible = "realtek,rtl9310-i2c", .data = (void *) &rtl9310_i2c_drv_data },
+ 	{}
+ };
+ MODULE_DEVICE_TABLE(of, i2c_rtl9300_dt_ids);
+-- 
+2.48.1
+

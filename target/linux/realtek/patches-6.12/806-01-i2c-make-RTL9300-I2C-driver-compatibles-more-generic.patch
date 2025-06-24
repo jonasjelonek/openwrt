@@ -1,0 +1,46 @@
+From 461c8881f698cc8961e09421399b18684f30b392 Mon Sep 17 00:00:00 2001
+From: Jonas Jelonek <jelonek.jonas@gmail.com>
+Date: Thu, 26 Jun 2025 11:39:42 +0000
+Subject: [PATCH 1/2] i2c: make RTL9300 I2C driver compatibles more generic
+
+Currently, the RTL9300 I2C driver uses SoC-specific compatible strings
+like 'realtek,rtl9301-i2c', 'realtek,rtl9302b-i2c'. While this might be
+for a good reason, it is counter-intuitive for the usecase of defining
+the I2C controllers within a generic DTSI like 'rtl930x.dtsi'. Right
+now this requires more specific DTS/DTSI to adjust the compatible string
+again.
+
+This is less understandable looking at the fact that within the RTL9300
+series, the different SoCs have the same I2C capabilities and use the
+same register layout. Moreover, the driver currently doesn't use this
+distinction for anything, and 'realtek,rtl9301-i2c' is currently used as
+some kind of generic although RTL9301 are specific SoCs.
+
+To cleanup this confusion, this adds a generic compatible string
+'realtek,rtl9300-i2c' for the whole RTL9300 series. Existing compatibles
+are kept for backward compatibility and to still allow SoC-specific
+distinctions in the unlikely case of any differences.
+
+The compatible 'realtek,rtl9301-i2c' is degraded to a non-generic.
+Instead 'realtek,rtl9300-i2c' should be used as a generic. Since this
+driver is not yet used that much, this also introduces
+non-backward-compatible changes to the compatible strings and adjusts
+all usages.
+
+Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
+
+diff --git a/drivers/i2c/busses/i2c-rtl9300.c b/drivers/i2c/busses/i2c-rtl9300.c
+index e064e8a4a1f0..e02a8ba40f6f 100644
+--- a/drivers/i2c/busses/i2c-rtl9300.c
++++ b/drivers/i2c/busses/i2c-rtl9300.c
+@@ -401,6 +401,7 @@ static int rtl9300_i2c_probe(struct platform_device *pdev)
+ }
+ 
+ static const struct of_device_id i2c_rtl9300_dt_ids[] = {
++	{ .compatible = "realtek,rtl9300-i2c" },
+ 	{ .compatible = "realtek,rtl9301-i2c" },
+ 	{ .compatible = "realtek,rtl9302b-i2c" },
+ 	{ .compatible = "realtek,rtl9302c-i2c" },
+-- 
+2.48.1
+
