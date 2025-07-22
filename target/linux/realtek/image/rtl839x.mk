@@ -80,3 +80,16 @@ define Device/zyxel_gs1900-48
   ZYXEL_VERS := AAHN
 endef
 TARGET_DEVICES += zyxel_gs1900-48
+
+define Device/zyxel_gs1920-24
+  SOC := rtl8392
+  DEVICE_VENDOR := ZyXEL
+  DEVICE_MODEL := GS1920-24
+  IMAGE_SIZE := 7405568
+  KERNEL_INITRAMFS := \
+        kernel-bin | \
+        append-dtb | \
+        rt-compress | \
+        rt-loader
+endef
+TARGET_DEVICES += zyxel_gs1920-24
