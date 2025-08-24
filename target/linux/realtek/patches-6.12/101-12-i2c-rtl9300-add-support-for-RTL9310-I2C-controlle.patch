@@ -1,7 +1,7 @@
-From ceddd84c5f73b17a1d8b9a760d9d5b5b7f0f0519 Mon Sep 17 00:00:00 2001
+From 8e0bebe85b844305770aa8ea1bcc21e4bb64b955 Mon Sep 17 00:00:00 2001
 From: Jonas Jelonek <jelonek.jonas@gmail.com>
 Date: Mon, 30 Jun 2025 17:02:32 +0000
-Subject: [PATCH v5 11/11] i2c: rtl9300: add support for RTL9310 I2C controller
+Subject: [PATCH v6 12/12] i2c: rtl9300: add support for RTL9310 I2C controller
 
 Add support for the internal I2C controllers of RTL9310 series based
 SoCs to the driver for RTL9300. Add register definitions, chip-specific
@@ -15,11 +15,13 @@ which has SCL selection in a global register instead of a
 master-specific one.
 
 Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
-Link: https://lore.kernel.org/linux-i2c/20250809220713.1038947-12-jelonek.jonas@gmail.com/
+Tested-by: Sven Eckelmann <sven@narfation.org>
 ---
  drivers/i2c/busses/i2c-rtl9300.c | 44 ++++++++++++++++++++++++++++++--
  1 file changed, 42 insertions(+), 2 deletions(-)
 
+diff --git a/drivers/i2c/busses/i2c-rtl9300.c b/drivers/i2c/busses/i2c-rtl9300.c
+index c67463228604..bfceca24ad7d 100644
 --- a/drivers/i2c/busses/i2c-rtl9300.c
 +++ b/drivers/i2c/busses/i2c-rtl9300.c
 @@ -60,14 +60,16 @@ struct rtl9300_i2c_drv_data {
@@ -40,20 +42,20 @@ Link: https://lore.kernel.org/linux-i2c/20250809220713.1038947-12-jelonek.jonas@
  	u8 sda_num;
  	struct mutex lock;
  };
-@@ -96,6 +98,12 @@ struct rtl9300_i2c_xfer {
+@@ -98,6 +100,12 @@ struct rtl9300_i2c_xfer {
  #define RTL9300_I2C_MST_DATA_WORD3			0x14
  #define RTL9300_I2C_MST_GLB_CTRL			0x384
  
 +#define RTL9310_I2C_MST_IF_CTRL				0x1004
-+#define	RTL9310_I2C_MST_IF_SEL				0x1008
-+#define	RTL9310_I2C_MST_CTRL				0x0
-+#define	RTL9310_I2C_MST_MEMADDR_CTRL			0x4
++#define RTL9310_I2C_MST_IF_SEL				0x1008
++#define RTL9310_I2C_MST_CTRL				0x0
++#define RTL9310_I2C_MST_MEMADDR_CTRL			0x4
 +#define RTL9310_I2C_MST_DATA_CTRL			0x8
 +
  static int rtl9300_i2c_reg_addr_set(struct rtl9300_i2c *i2c, u32 reg, u16 len)
  {
  	int ret;
-@@ -112,6 +120,11 @@ static int rtl9300_i2c_select_scl(struct
+@@ -114,6 +122,11 @@ static int rtl9300_i2c_select_scl(struct rtl9300_i2c *i2c, u8 scl)
  	return regmap_field_write(i2c->fields[F_SCL_SEL], 1);
  }
  
@@ -65,7 +67,7 @@ Link: https://lore.kernel.org/linux-i2c/20250809220713.1038947-12-jelonek.jonas@
  static int rtl9300_i2c_config_chan(struct rtl9300_i2c *i2c, struct rtl9300_i2c_chan *chan)
  {
  	struct rtl9300_i2c_drv_data *drv_data;
-@@ -125,7 +138,7 @@ static int rtl9300_i2c_config_chan(struc
+@@ -127,7 +140,7 @@ static int rtl9300_i2c_config_chan(struct rtl9300_i2c *i2c, struct rtl9300_i2c_c
  		return ret;
  
  	drv_data = (struct rtl9300_i2c_drv_data *)device_get_match_data(i2c->dev);
@@ -74,7 +76,7 @@ Link: https://lore.kernel.org/linux-i2c/20250809220713.1038947-12-jelonek.jonas@
  	if (ret)
  		return ret;
  
-@@ -383,6 +396,10 @@ static int rtl9300_i2c_probe(struct plat
+@@ -379,6 +392,10 @@ static int rtl9300_i2c_probe(struct platform_device *pdev)
  	if (ret)
  		return ret;
  
@@ -85,7 +87,7 @@ Link: https://lore.kernel.org/linux-i2c/20250809220713.1038947-12-jelonek.jonas@
  	platform_set_drvdata(pdev, i2c);
  
  	drv_data = (struct rtl9300_i2c_drv_data *)device_get_match_data(i2c->dev);
-@@ -478,12 +495,35 @@ static const struct rtl9300_i2c_drv_data
+@@ -474,12 +491,35 @@ static const struct rtl9300_i2c_drv_data rtl9300_i2c_drv_data = {
  	.max_nchan = RTL9300_I2C_MUX_NCHAN,
  };
  
@@ -121,3 +123,6 @@ Link: https://lore.kernel.org/linux-i2c/20250809220713.1038947-12-jelonek.jonas@
  	{}
  };
  MODULE_DEVICE_TABLE(of, i2c_rtl9300_dt_ids);
+-- 
+2.48.1
+

@@ -1,7 +1,7 @@
-From 7bb38428b718a281e09b35bc26478600b53300fc Mon Sep 17 00:00:00 2001
+From 5e52aed17e3279998dba9788e57fe8d1774c32f1 Mon Sep 17 00:00:00 2001
 From: Jonas Jelonek <jelonek.jonas@gmail.com>
 Date: Mon, 4 Aug 2025 10:26:35 +0000
-Subject: [PATCH v5 03/11] dt-bindings: i2c: realtek,rtl9301-i2c: fix wording
+Subject: [PATCH v6 05/12] dt-bindings: i2c: realtek,rtl9301-i2c: fix wording
  and typos
 
 Fix wording of binding description to use plural because there is not
@@ -14,11 +14,13 @@ Change 'SDA pin' to 'SDA line number' because the property must contain
 the SDA (channel) number ranging from 0-7 instead of a real pin number.
 
 Signed-off-by: Jonas Jelonek <jelonek.jonas@gmail.com>
-Link: https://lore.kernel.org/linux-i2c/20250809220713.1038947-4-jelonek.jonas@gmail.com/
+Reviewed-by: Rob Herring (Arm) <robh@kernel.org>
 ---
  .../devicetree/bindings/i2c/realtek,rtl9301-i2c.yaml        | 6 +++---
  1 file changed, 3 insertions(+), 3 deletions(-)
 
+diff --git a/Documentation/devicetree/bindings/i2c/realtek,rtl9301-i2c.yaml b/Documentation/devicetree/bindings/i2c/realtek,rtl9301-i2c.yaml
+index 69ac5db8b914..274e2ab8b612 100644
 --- a/Documentation/devicetree/bindings/i2c/realtek,rtl9301-i2c.yaml
 +++ b/Documentation/devicetree/bindings/i2c/realtek,rtl9301-i2c.yaml
 @@ -10,7 +10,7 @@ maintainers:
@@ -48,3 +50,6 @@ Link: https://lore.kernel.org/linux-i2c/20250809220713.1038947-4-jelonek.jonas@g
          maxItems: 1
  
      required:
+-- 
+2.48.1
+
