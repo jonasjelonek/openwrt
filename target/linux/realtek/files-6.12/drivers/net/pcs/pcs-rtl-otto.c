@@ -503,6 +503,59 @@ static int rtpcs_838x_setup_serdes(struct rtpcs_ctrl *ctrl, int sds,
 	return 0;
 }
 
+/* RTL839X */
+
+#define RTL839X_SDS12_13_XSG0                   (0xB800)
+
+__attribute__((unused))
+static int rtpcs_839x_sds_power(struct rtpcs_ctrl *ctrl, u32 sds, int val)
+{
+	u32 offset;
+	u32 mode = val ? 0 : 1;
+
+	pr_debug("In %s: sds %u, set %d\n", __func__, sds, val);
+
+	if (sds != 12 && sds != 13)
+		return -ENODEV;
+
+	offset = (sds == 13) ? 0x100 : 0x0;
+
+	/* Set bit 1003. 1000 starts at 7c */
+//	sw_w32_mask(BIT(11), mode << 11, RTL839X_SDS12_13_PWR0 + offset);
+	/* FR0_CFG_FIB_PDOWN: Bit 1003 */
+//	sw_w32_mask(0, 1 << 11, RTL839X_SDS12_13_XSG0 + 0x7c);
+	regmap_write_bits(ctrl->map, RTL839X_SDS12_13_XSG0 + offset, BIT(11), mode << 11);
+
+	return 0;
+}
+
+static int rtpcs_839x_init_serdes_global(struct rtpcs_ctrl *ctrl)
+{
+	/* In autoneg state, force link, set SR4_CFG_EN_LINK_FIB1G */
+//	sw_w32_mask(0, 1 << 18, RTL839X_SDS12_13_XSG0 + 0x0a);
+	/* is that even correct ?! */
+	/* rather that?: */
+	/* SR4_CFG_EN_LINK_FIB1G: Bit 1954 → Offset 0xF4, Bit 2 */
+//	sw_w32_mask(0, 1 << 2, RTL839X_SDS12_13_XSG0 + 0xf4);
+	regmap_write_bits(ctrl->map, RTL839X_SDS12_13_XSG0 + 0xf4, 0x4, 1 << 2);
+
+	/* Disable EEE: Clear FRE16_EEE_RSG_FIB1G, FRE16_EEE_STD_FIB1G,
+	 * FRE16_C1_PWRSAV_EN_FIB1G, FRE16_C2_PWRSAV_EN_FIB1G
+	 * and FRE16_EEE_QUIET_FIB1G
+	 */
+//	sw_w32_mask(0x1f << 10, 0, RTL839X_SDS12_13_XSG0 + 0xe0);
+
+	/* Disable EEE: Clear FRE16_EEE_RSG_FIB1G, FRE16_EEE_STD_FIB1G,
+	 * FRE16_C1_PWRSAV_EN_FIB1G, FRE16_C2_PWRSAV_EN_FIB1G
+	 * and FRE16_EEE_QUIET_FIB1G
+	 * Bits 234-238 → Offset 0x1C, Bits 10-14
+	 */
+//	sw_w32_mask(0x1f << 10, 0, RTL839X_SDS12_13_XSG0 + 0x1c);
+	regmap_write_bits(ctrl->map, RTL839X_SDS12_13_XSG0 + 0x1c, 0x1f << 10, 0);
+
+	return 0;
+}
+
 /* RTL930X */
 
 /* The access registers for SDS_MODE_SEL and the LSB for each SDS within */
