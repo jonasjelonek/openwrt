@@ -3279,6 +3279,8 @@ static const struct rtpcs_config rtpcs_839x_cfg = {
 	.mac_rx_pause_sts	= RTPCS_839X_MAC_RX_PAUSE_STS,
 	.mac_tx_pause_sts	= RTPCS_839X_MAC_TX_PAUSE_STS,
 	.pcs_ops		= &rtpcs_839x_pcs_ops,
+	.init_serdes_global	= rtpcs_839x_init_serdes_global,
+	.setup_serdes		= rtpcs_839x_setup_serdes,
 };
 
 static const struct phylink_pcs_ops rtpcs_930x_pcs_ops = {
