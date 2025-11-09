@@ -529,6 +529,76 @@ static int rtpcs_839x_sds_power(struct rtpcs_ctrl *ctrl, u32 sds, int val)
 	return 0;
 }
 
+static void rtpcs_839x_sds8_reset(struct rtpcs_ctrl *ctrl)
+{
+        regmap_write_bits(ctrl->map, 0xb3f8, 0x3 << 20, 0x3 << 20);	// PHY_8390_SERDES_SET(0xb3f8,  21 , 20  , 0x0003);
+        regmap_write_bits(ctrl->map, 0xb320, 1 << 3, 0x0);		// PHY_8390_SERDES_SET(0xb320,  3  , 3  , 0x0);
+        regmap_write_bits(ctrl->map, 0xb340, 1 << 15, 1 << 15);		// PHY_8390_SERDES_SET(0xb340,  15  , 15  , 0x1);
+
+        udelay(100 * 1000);						// phy_osal_time_usleep(100 * 1000);
+
+        regmap_write_bits(ctrl->map, 0xb340, 1 << 15, 0x0);		// PHY_8390_SERDES_SET(0xb340,  15  , 15  , 0x0);
+        regmap_write_bits(ctrl->map, 0xb3f8, 0x3 << 20, 0x1 << 20);	// PHY_8390_SERDES_SET(0xb3f8,  21 , 20  , 0x0001);
+        regmap_write_bits(ctrl->map, 0xb3f8, 0x3 << 20, 0x0);		// PHY_8390_SERDES_SET(0xb3f8,  21 , 20  , 0x0000);
+
+        regmap_write_bits(ctrl->map, 0xb004, 1 << 22, 1 << 22);		// PHY_8390_SERDES_SET(0xb004,  22 , 22  , 0x0001);
+        udelay(100 * 1000);						// phy_osal_time_usleep(100 * 1000);
+        regmap_write_bits(ctrl->map, 0xb004, 1 << 22, 0x0);		// PHY_8390_SERDES_SET(0xb004,  22 , 22  , 0x0000);
+}
+
+static void rtpcs_839x_sds12_reset(struct rtpcs_ctrl *ctrl)
+{
+        regmap_write_bits(ctrl->map, 0xbbf8, 0x3 << 20, 0x3 << 20);	// PHY_8390_SERDES_SET(0xbbf8,  21 , 20  , 0x0003);
+        regmap_write_bits(ctrl->map, 0xbb20, 1 << 3, 0x0);		// PHY_8390_SERDES_SET(0xbb20,  3  , 3  , 0x0);
+        regmap_write_bits(ctrl->map, 0xbb40, 1 << 15, 1 << 15);		// PHY_8390_SERDES_SET(0xbb40,  15  , 15  , 0x1);
+
+        udelay(100 * 1000);						// phy_osal_time_usleep(100 * 1000);
+
+        regmap_write_bits(ctrl->map, 0xbb40, 1 << 15, 0x0);		// PHY_8390_SERDES_SET(0xbb40,  15  , 15  , 0x0);
+        regmap_write_bits(ctrl->map, 0xbbf8, 0x3 << 20, 0x1 << 20);	// PHY_8390_SERDES_SET(0xbbf8,  21 , 20  , 0x0001);
+        regmap_write_bits(ctrl->map, 0xbbf8, 0x3 << 20, 0x0);		// PHY_8390_SERDES_SET(0xbbf8,  21 , 20  , 0x0000);
+
+        regmap_write_bits(ctrl->map, 0xb804, 1 << 22, 1 << 22);		// PHY_8390_SERDES_SET(0xb804,  22 , 22  , 0x0001);
+        udelay(100 * 1000);						// phy_osal_time_usleep(100 * 1000);
+        regmap_write_bits(ctrl->map, 0xb804, 1 << 22, 0x0);		// PHY_8390_SERDES_SET(0xb804,  22 , 22  , 0x0000);
+}
+
+static void rtpcs_839x_sds13_reset(struct rtpcs_ctrl *ctrl)
+{
+        regmap_write_bits(ctrl->map, 0xbbf8, 0x3 << 22, 0x3 << 22);	// PHY_8390_SERDES_SET(0xbbf8,  23 , 22  , 0x0003);
+        regmap_write_bits(ctrl->map, 0xbba0, 1 << 3, 0x0);		// PHY_8390_SERDES_SET(0xbba0,  3  , 3  , 0x0);
+        regmap_write_bits(ctrl->map, 0xbbc0, 1 << 15, 1 << 15);		// PHY_8390_SERDES_SET(0xbbc0,  15  , 15  , 0x1);
+
+        udelay(100 * 1000);						// phy_osal_time_usleep(100 * 1000);
+
+        regmap_write_bits(ctrl->map, 0xbbc0, 1 << 15, 0x0);		// PHY_8390_SERDES_SET(0xbbc0,  15  , 15  , 0x0);
+        regmap_write_bits(ctrl->map, 0xbbf8, 0x3 << 22, 0x1 << 22);	// PHY_8390_SERDES_SET(0xbbf8,  23 , 22  , 0x0001);
+        regmap_write_bits(ctrl->map, 0xbbf8, 0x3 << 22, 0x0);		// PHY_8390_SERDES_SET(0xbbf8,  23 , 22  , 0x0000);
+
+        regmap_write_bits(ctrl->map, 0xb904, 1 << 22, 1 << 22);		// PHY_8390_SERDES_SET(0xb904,  22 , 22  , 0x0001);
+        udelay(100 * 1000);						// phy_osal_time_usleep(100 * 1000);
+        regmap_write_bits(ctrl->map, 0xb904, 1 << 22, 0x0);		// PHY_8390_SERDES_SET(0xb904,  22 , 22  , 0x0000);
+}
+
+static void rtpcs_839x_sds_reset(struct rtpcs_ctrl *ctrl, u32 sds)
+{
+	switch (sds) {
+	case 8:
+		rtpcs_839x_sds8_reset(ctrl);
+		break;
+	case 12:
+		rtpcs_839x_sds12_reset(ctrl);
+		break;
+	case 13:
+		rtpcs_839x_sds13_reset(ctrl);
+		break;
+	default:
+		pr_err("%s: SDS %u cannot be reset\n", __func__, sds);
+		return;
+	}
+}
+		
+
 static int rtpcs_839x_init_serdes_global(struct rtpcs_ctrl *ctrl)
 {
 	/* In autoneg state, force link, set SR4_CFG_EN_LINK_FIB1G */
@@ -553,6 +623,44 @@ static int rtpcs_839x_init_serdes_global(struct rtpcs_ctrl *ctrl)
 //	sw_w32_mask(0x1f << 10, 0, RTL839X_SDS12_13_XSG0 + 0x1c);
 	regmap_write_bits(ctrl->map, RTL839X_SDS12_13_XSG0 + 0x1c, 0x1f << 10, 0);
 
+	return 0;
+}
+
+static int rtpcs_839x_setup_serdes(struct rtpcs_ctrl *ctrl, int sds,
+				   phy_interface_t mode)
+{
+	bool even;
+
+	if (sds != 8 && sds !=9 && sds != 12 && sds != 13)
+		return -ENODEV;
+
+	even = (sds & 1) == 0;
+
+	rtpcs_sds_write(ctrl, sds, 0x0a, 0x1c, 0x002a);
+	rtpcs_sds_write(ctrl, sds, 0x0a, 0x1d, 0x0000);
+	rtpcs_sds_write(ctrl, sds, 0x0a, 0x1e, 0xa052); // changes to 0x0002
+	rtpcs_sds_write(ctrl, sds, 0x0a, 0x1f, 0x9a00); // changes to 0xbe00
+	rtpcs_sds_write(ctrl, sds, 0x0b, 0x00, 0x00f5);
+	rtpcs_sds_write(ctrl, sds, 0x0b, 0x01, 0xc480);
+	rtpcs_sds_write(ctrl, sds, 0x0b, 0x05, 0x3340);
+	rtpcs_sds_write(ctrl, sds, 0x0b, 0x08, 0x803f);
+	rtpcs_sds_write(ctrl, sds, 0x0b, 0x0c, 0x2bff);
+	rtpcs_sds_write(ctrl, sds, 0x0b, 0x0d, 0x2bff);
+	rtpcs_sds_write(ctrl, sds, 0x0b, 0x11, 0x0000);
+
+	if (even) {
+		rtpcs_sds_write(ctrl, sds, 0x0a, 0x11, 0xf04a);
+		rtpcs_sds_write(ctrl, sds, 0x0b, 0x04, 0x39ff);
+		rtpcs_sds_write(ctrl, sds, 0x0b, 0x06, 0x40a2);
+		rtpcs_sds_write(ctrl, sds, 0x0b, 0x0e, 0x4e10); // changes to 0x0a10
+	} else {
+		rtpcs_sds_write(ctrl, sds, 0x0a, 0x11, 0xfdab);
+		rtpcs_sds_write(ctrl, sds, 0x0b, 0x04, 0x93fa);
+		rtpcs_sds_write(ctrl, sds, 0x0b, 0x06, 0x4280);
+		rtpcs_sds_write(ctrl, sds, 0x0b, 0x0e, 0x4c50); // changes to 0x0a10
+	}
+
+	rtpcs_839x_sds_reset(ctrl, sds);
 	return 0;
 }
 
