@@ -2001,12 +2001,11 @@ static void rtpcs_931x_sds_symerr_clear(struct rtpcs_ctrl *ctrl, u32 sds,
 	return;
 }
 
-__attribute__((unused))
 static void rtpcs_931x_sds_fiber_disable(struct rtpcs_ctrl *ctrl, u32 sds)
 {
-	u32 v = 0x3F;
+	u32 v = 0x3f;
 
-	rtpcs_sds_write_bits(ctrl, sds, 0x1F, 0x9, 11, 6, v);
+	rtpcs_sds_write_bits(ctrl, sds, 0x1f, 0x9, 11, 6, v);
 }
 
 static void rtpcs_931x_sds_fiber_mode_set(struct rtpcs_ctrl *ctrl, u32 sds,
@@ -2435,28 +2434,31 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_ctrl *ctrl, int sds,
 		break;
 
 	case PHY_INTERFACE_MODE_10GBASER: /* MII_10GR / MII_10GR1000BX_AUTO: */
-	                                  /* configure 10GR fiber mode=1 */
-		rtpcs_sds_write_bits(ctrl, sds, 0x1f, 0xb, 1, 1, 1);
+		rtpcs_931x_sds_rx_reset(ctrl, sds);
 
-		/* init fiber_1g */
-		rtpcs_sds_write_bits(ctrl, sds, 0x43, 0x13, 15, 14, 0);
+		rtpcs_sds_write_bits(ctrl, sds, 0x20, 0x0, 11, 10, 0x0);
+		rtpcs_sds_write_bits(ctrl, sds, 0x2a, 0x7, 15, 15, 0x1);
+		rtpcs_sds_write_bits(ctrl, sds, 0x20, 0x0, 11, 10, 0x3);
+		rtpcs_sds_write_bits(ctrl, sds, 0x2e, 0xf, 5, 0, 0x2);
+		rtpcs_sds_write_bits(ctrl, sds, 0x6, 0xd, 6, 6, 0x1);
 
-		rtpcs_sds_write_bits(ctrl, sds, 0x42, 0x0, 12, 12, 1);
-		rtpcs_sds_write_bits(ctrl, sds, 0x42, 0x0, 6, 6, 1);
-		rtpcs_sds_write_bits(ctrl, sds, 0x42, 0x0, 13, 13, 0);
-
-		/* init auto */
-		rtpcs_sds_write_bits(ctrl, sds, 0x1f, 13, 15, 0, 0x109e);
-		rtpcs_sds_write_bits(ctrl, sds, 0x1f, 0x6, 14, 10, 0x8);
-		rtpcs_sds_write_bits(ctrl, sds, 0x1f, 0x7, 10, 4, 0x7f);
+		rtpcs_931x_sds_fiber_disable(ctrl, sds);
+		rtpcs_931x_sds_fiber_mode_set(ctrl, sds, PHY_INTERFACE_MODE_10GBASER);
+		rtpcs_sds_write_bits(ctrl, sds, 0x5f, 0x1, 0, 0, 0x0);
 		break;
 
 	case PHY_INTERFACE_MODE_1000BASEX: /* MII_1000BX_FIBER */
-		rtpcs_sds_write_bits(ctrl, sds, 0x43, 0x13, 15, 14, 0);
+		rtpcs_931x_sds_rx_reset(ctrl, sds);
 
-		rtpcs_sds_write_bits(ctrl, sds, 0x42, 0x0, 12, 12, 1);
-		rtpcs_sds_write_bits(ctrl, sds, 0x42, 0x0, 6, 6, 1);
-		rtpcs_sds_write_bits(ctrl, sds, 0x42, 0x0, 13, 13, 0);
+		rtpcs_sds_write_bits(ctrl, sds, 0x20, 0x0, 11, 10, 0x0);
+		rtpcs_sds_write_bits(ctrl, sds, 0x2a, 0x7, 15, 15, 0x0);
+		rtpcs_sds_write_bits(ctrl, sds, 0x20, 0x0, 15, 15, 0x3);
+		rtpcs_sds_write_bits(ctrl, sds, 0x6, 0xd, 6, 6, 0x1);
+
+		rtpcs_931x_sds_fiber_disable(ctrl, sds);
+		rtpcs_931x_sds_fiber_mode_set(ctrl, sds, PHY_INTERFACE_MODE_1000BASEX);
+		rtpcs_sds_write_bits(ctrl, sds, 0x5f, 0x1, 0, 0, 0x0);
+
 		break;
 
 	case PHY_INTERFACE_MODE_SGMII:
