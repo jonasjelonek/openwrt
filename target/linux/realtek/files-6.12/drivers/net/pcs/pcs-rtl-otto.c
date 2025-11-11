@@ -2315,6 +2315,7 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_ctrl *ctrl, int sds,
 		0x0123, 0x0163, 0x01a3, 0x01a0, 0x01c3, 0x09c3,
 	};
 	u32 band, ori, model_info, val;
+	int even_sds;
 	int chiptype = 0;
 
 	if (sds < 0 || sds > 13)
@@ -2331,6 +2332,7 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_ctrl *ctrl, int sds,
 	 */
 	if (mode == PHY_INTERFACE_MODE_USXGMII)
 		return 0;
+	even_sds = sds & ~1;
 
 	pr_info("%s: set sds %d to mode %d\n", __func__, sds, mode);
 	val = rtpcs_sds_read_bits(ctrl, sds, 0x1F, 0x9, 11, 6);
@@ -2365,6 +2367,10 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_ctrl *ctrl, int sds,
 	regmap_write(ctrl->map, RTL931X_PS_SERDES_OFF_MODE_CTRL_ADDR, val);
 
 	band = rtpcs_931x_sds_cmu_band_get(ctrl, sds, mode);
+
+	rtpcs_sds_write_bits(ctrl, sds, 0x5f, 0x1, 0, 0, 0x1);
+
+	rtpcs_sds_write(ctrl, even_sds, 0x2e, 0x8, 0x0294);
 
 	switch (mode) {
 	case PHY_INTERFACE_MODE_NA:
@@ -2486,6 +2492,17 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_ctrl *ctrl, int sds,
 
 	rtpcs_93xx_sds_set_polarity(ctrl, sds, ctrl->tx_pol_inv[sds],
 				    ctrl->rx_pol_inv[sds]);
+
+	if (mode == PHY_INTERFACE_MODE_10GBASER) {
+		rtpcs_sds_write(ctrl, sds, 0x2e, 0x12, 0x27c0);
+		rtpcs_sds_write(ctrl, sds, 0x2f, 0x0, 0xc000);
+		rtpcs_sds_write(ctrl, sds, 0x2f, 0x2, 0x6010);
+	}
+
+	rtpcs_sds_write(ctrl, sds, 0x20, 0x0, 0xc30);
+	rtpcs_sds_write_bits(ctrl, sds, 0x2a, 0x12, 7, 6, 0x3);
+
+	regmap_write_bits(ctrl->map, 0x12f8, BIT(sds - 2), BIT(sds - 2));
 
 	val = ori & ~BIT(sds);
 	regmap_write(ctrl->map, RTL931X_PS_SERDES_OFF_MODE_CTRL_ADDR, val);
