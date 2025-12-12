@@ -2278,6 +2278,24 @@ static int rtpcs_931x_sds_power(struct rtpcs_serdes *sds, bool power_on)
 				 BIT(sds->id), en_val);
 }
 
+static void rtpcs_931x_sds_rx_reset(struct rtpcs_serdes *sds)
+{
+	if (sds->id < 2)
+		return;
+
+	rtpcs_sds_write(sds, 0x2e, 0x12, 0x2740);
+	rtpcs_sds_write(sds, 0x2f, 0x0, 0x0);
+	rtpcs_sds_write(sds, 0x2f, 0x2, 0x2010);
+	rtpcs_sds_write(sds, 0x20, 0x0, 0xc10);
+
+	rtpcs_sds_write(sds, 0x2e, 0x12, 0x27c0);
+	rtpcs_sds_write(sds, 0x2f, 0x0, 0xc000);
+	rtpcs_sds_write(sds, 0x2f, 0x2, 0x6010);
+	rtpcs_sds_write(sds, 0x20, 0x0, 0xc30);
+
+	mdelay(50);
+}
+
 static void rtpcs_931x_sds_reset(struct rtpcs_serdes *sds)
 {
 	struct rtpcs_ctrl *ctrl = sds->ctrl;
@@ -2487,24 +2505,6 @@ static void rtpcs_931x_sds_cmu_type_set(struct rtpcs_serdes *sds,
 	}
 
 	pr_info("%s CMU page 0x28 0x7 %08x\n", __func__, rtpcs_sds_read(sds, 0x28, 0x7));
-}
-
-static void rtpcs_931x_sds_rx_reset(struct rtpcs_serdes *sds)
-{
-	if (sds->id < 2)
-		return;
-
-	rtpcs_sds_write(sds, 0x2e, 0x12, 0x2740);
-	rtpcs_sds_write(sds, 0x2f, 0x0, 0x0);
-	rtpcs_sds_write(sds, 0x2f, 0x2, 0x2010);
-	rtpcs_sds_write(sds, 0x20, 0x0, 0xc10);
-
-	rtpcs_sds_write(sds, 0x2e, 0x12, 0x27c0);
-	rtpcs_sds_write(sds, 0x2f, 0x0, 0xc000);
-	rtpcs_sds_write(sds, 0x2f, 0x2, 0x6010);
-	rtpcs_sds_write(sds, 0x20, 0x0, 0xc30);
-
-	mdelay(50);
 }
 
 __maybe_unused
