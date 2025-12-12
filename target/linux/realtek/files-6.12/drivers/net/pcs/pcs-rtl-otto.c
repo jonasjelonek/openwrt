@@ -2670,7 +2670,7 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_serdes *sds,
 	 *
 	 * For now disable all USXGMII SerDes handling and rely on U-Boot setup.
 	 */
-	if (mode == PHY_INTERFACE_MODE_USXGMII)
+	if (mode == PHY_INTERFACE_MODE_USXGMII || mode == PHY_INTERFACE_MODE_NA)
 		return 0;
 
 	pr_info("%s: set sds %d to mode %d\n", __func__, sds_id, mode);
@@ -2708,9 +2708,6 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_serdes *sds,
 	band = rtpcs_931x_sds_cmu_band_get(sds, mode);
 
 	switch (mode) {
-	case PHY_INTERFACE_MODE_NA:
-		break;
-
 	case PHY_INTERFACE_MODE_XGMII: /* MII_XSGMII */
 
 		if (chiptype) {
