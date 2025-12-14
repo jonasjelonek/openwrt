@@ -2409,14 +2409,6 @@ static int rtpcs_931x_sds_mii_set_mode(struct rtpcs_serdes *sds,
 		     RTL931X_SERDES_MODE_CTRL + 4 * (sds->id >> 2), val);
 }
 
-__always_unused
-static void rtpcs_931x_sds_fiber_disable(struct rtpcs_serdes *sds)
-{
-	u32 v = 0x3F;
-
-	rtpcs_sds_write_bits(sds, 0x1F, 0x9, 11, 6, v);
-}
-
 static int rtpcs_931x_sds_fiber_set_mode(struct rtpcs_serdes *sds,
 					 enum rtpcs_sds_mode mode)
 {
