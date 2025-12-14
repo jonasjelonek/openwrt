@@ -2447,6 +2447,15 @@ static int rtpcs_931x_sds_fiber_set_mode(struct rtpcs_serdes *sds,
 	return rtpcs_sds_write_bits(sds, 0x1f, 0x9, 11, 6, val);
 }
 
+static int rtpcs_931x_sds_set_mode(struct rtpcs_serdes *sds,
+				   enum rtpcs_sds_mode mode)
+{
+	if (mode == RTPCS_SDS_MODE_XSGMII)
+		return rtpcs_931x_sds_mii_set_mode(sds, mode);
+	else
+		return rtpcs_931x_sds_fiber_set_mode(sds, mode);
+}
+
 static int rtpcs_931x_sds_cmu_page_get(phy_interface_t mode)
 {
 	switch (mode) {
@@ -2877,11 +2886,7 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_serdes *sds,
 
 	rtpcs_931x_sds_power(sds, true);
 
-	if (mode == PHY_INTERFACE_MODE_QSGMII ||
-	    mode == PHY_INTERFACE_MODE_SGMII ||
-	    mode == PHY_INTERFACE_MODE_USXGMII) {
-		rtpcs_931x_sds_fiber_set_mode(sds, sds_mode);
-	}
+	rtpcs_931x_sds_set_mode(sds, sds_mode);
 	sds->mode = sds_mode;
 
 	return 0;
