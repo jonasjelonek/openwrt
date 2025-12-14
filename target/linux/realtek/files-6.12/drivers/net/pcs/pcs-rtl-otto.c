@@ -2316,6 +2316,42 @@ static void rtpcs_931x_sds_reset(struct rtpcs_serdes *sds)
 	rtpcs_931x_sds_power(sds, true);
 }
 
+__maybe_unused
+static int rtpcs_931x_sds_mii_set_mode(struct rtpcs_serdes *sds,
+				       enum rtpcs_sds_mode mode)
+{
+	u32 val;
+
+	switch (mode) {
+	case RTPCS_SDS_MODE_OFF:
+		val = 0x1f;
+		break;
+	case RTPCS_SDS_MODE_SGMII:
+		val = 0x02;
+		break;
+	case RTPCS_SDS_MODE_QSGMII:
+		val = 0x06;
+		break;
+	case RTPCS_SDS_MODE_XSGMII:
+		val = 0x10;
+		break;
+	case RTPCS_SDS_MODE_USXGMII_10GSXGMII:
+	case RTPCS_SDS_MODE_USXGMII_10GDXGMII:
+	case RTPCS_SDS_MODE_USXGMII_10GQXGMII:
+	case RTPCS_SDS_MODE_USXGMII_5GSXGMII:
+	case RTPCS_SDS_MODE_USXGMII_5GDXGMII:
+	case RTPCS_SDS_MODE_USXGMII_2_5GSXGMII:
+		val = 0x0d;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	val |= BIT(7); /* force mode bit */
+	return regmap_write(sds->ctrl->map,
+		     RTL931X_SERDES_MODE_CTRL + 4 * (sds->id >> 2), val);
+}
+
 static void rtpcs_931x_sds_disable(struct rtpcs_serdes *sds)
 {
 	regmap_write(sds->ctrl->map,
@@ -2505,42 +2541,6 @@ static void rtpcs_931x_sds_cmu_type_set(struct rtpcs_serdes *sds,
 	}
 
 	pr_info("%s CMU page 0x28 0x7 %08x\n", __func__, rtpcs_sds_read(sds, 0x28, 0x7));
-}
-
-__maybe_unused
-static int rtpcs_931x_sds_mii_set_mode(struct rtpcs_serdes *sds,
-				       enum rtpcs_sds_mode mode)
-{
-	u32 val;
-
-	switch (mode) {
-	case RTPCS_SDS_MODE_OFF:
-		val = 0x1f;
-		break;
-	case RTPCS_SDS_MODE_SGMII:
-		val = 0x02;
-		break;
-	case RTPCS_SDS_MODE_QSGMII:
-		val = 0x06;
-		break;
-	case RTPCS_SDS_MODE_XSGMII:
-		val = 0x10;
-		break;
-	case RTPCS_SDS_MODE_USXGMII_10GSXGMII:
-	case RTPCS_SDS_MODE_USXGMII_10DSXGMII:
-	case RTPCS_SDS_MODE_USXGMII_10GQXGMII:
-	case RTPCS_SDS_MODE_USXGMII_5GSXGMII:
-	case RTPCS_SDS_MODE_USXGMII_5GDXGMII:
-	case RTPCS_SDS_MODE_USXGMII_2_5GSXGMII:
-		val = 0x0d;
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	val |= BIT(7); /* force mode bit */
-	return regmap_write(sds->ctrl->map,
-		     	    RTL931X_SERDES_MODE_CTRL + 4 * (sds->id >> 2), val);
 }
 
 static int rtpcs_931x_sds_cmu_band_set(struct rtpcs_serdes *sds,
