@@ -2509,22 +2509,30 @@ static void rtpcs_931x_sds_cmu_type_set(struct rtpcs_serdes *sds,
 
 __maybe_unused
 static void rtpcs_931x_sds_mii_mode_set(struct rtpcs_serdes *sds,
-					phy_interface_t mode)
+					enum rtpcs_sds_mode mode)
 {
 	u32 val;
 
 	switch (mode) {
-	case PHY_INTERFACE_MODE_QSGMII:
+	case RTPCS_SDS_MODE_OFF:
+		val = 0x1f;
+		break;
+	case RTPCS_SDS_MODE_QSGMII:
 		val = 0x6;
 		break;
-	case PHY_INTERFACE_MODE_XGMII:
-		val = 0x10; /* serdes mode XSGMII */
+	case RTPCS_SDS_MODE_XSGMII:
+		val = 0x10;
 		break;
-	case PHY_INTERFACE_MODE_USXGMII:
-	case PHY_INTERFACE_MODE_2500BASEX:
+	case RTPCS_SDS_MODE_USXGMII_10GSXGMII:
+	case RTPCS_SDS_MODE_USXGMII_10DSXGMII:
+	case RTPCS_SDS_MODE_USXGMII_10GQXGMII:
+	case RTPCS_SDS_MODE_USXGMII_5GSXGMII:
+	case RTPCS_SDS_MODE_USXGMII_5GDXGMII:
+	case RTPCS_SDS_MODE_USXGMII_2_5GSXGMII:
+	case RTPCS_SDS_MODE_2500BASEX:
 		val = 0xD;
 		break;
-	case PHY_INTERFACE_MODE_SGMII:
+	case RTPCS_SDS_MODE_SGMII:
 		val = 0x2;
 		break;
 	default:
