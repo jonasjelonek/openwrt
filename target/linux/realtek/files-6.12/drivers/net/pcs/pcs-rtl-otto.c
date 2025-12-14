@@ -2507,6 +2507,7 @@ static void rtpcs_931x_sds_rx_reset(struct rtpcs_serdes *sds)
 	mdelay(50);
 }
 
+__maybe_unused
 static void rtpcs_931x_sds_mii_mode_set(struct rtpcs_serdes *sds,
 					phy_interface_t mode)
 {
@@ -2712,21 +2713,6 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_serdes *sds,
 	band = rtpcs_931x_sds_cmu_band_get(sds, mode);
 
 	switch (mode) {
-	case PHY_INTERFACE_MODE_XGMII: /* MII_XSGMII */
-
-		if (chiptype) {
-			/* fifo inv clk */
-			rtpcs_sds_write_bits(sds, 0x41, 0x1, 7, 4, 0xf);
-			rtpcs_sds_write_bits(sds, 0x41, 0x1, 3, 0, 0xf);
-
-			rtpcs_sds_write_bits(sds, 0x81, 0x1, 7, 4, 0xf);
-			rtpcs_sds_write_bits(sds, 0x81, 0x1, 3, 0, 0xf);
-		}
-
-		rtpcs_sds_write_bits(sds, 0x40, 0xE, 12, 12, 1);
-		rtpcs_sds_write_bits(sds, 0x80, 0xE, 12, 12, 1);
-		break;
-
 	case PHY_INTERFACE_MODE_USXGMII: /* MII_USXGMII_10GSXGMII/10GDXGMII/10GQXGMII: */
 		u32 op_code = 0x6003;
 
@@ -2836,14 +2822,10 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_serdes *sds,
 
 	rtpcs_931x_sds_power(sds, true);
 
-	if (mode == PHY_INTERFACE_MODE_XGMII ||
-	    mode == PHY_INTERFACE_MODE_QSGMII ||
+	if (mode == PHY_INTERFACE_MODE_QSGMII ||
 	    mode == PHY_INTERFACE_MODE_SGMII ||
 	    mode == PHY_INTERFACE_MODE_USXGMII) {
-		if (mode == PHY_INTERFACE_MODE_XGMII)
-			rtpcs_931x_sds_mii_mode_set(sds, mode);
-		else
-			rtpcs_931x_sds_fiber_mode_set(sds, mode);
+		rtpcs_931x_sds_fiber_mode_set(sds, mode);
 	}
 
 	return 0;
