@@ -2316,7 +2316,6 @@ static void rtpcs_931x_sds_reset(struct rtpcs_serdes *sds)
 	rtpcs_931x_sds_power(sds, true);
 }
 
-__maybe_unused
 static int rtpcs_931x_sds_mii_set_mode(struct rtpcs_serdes *sds,
 				       enum rtpcs_sds_mode mode)
 {
@@ -2350,12 +2349,6 @@ static int rtpcs_931x_sds_mii_set_mode(struct rtpcs_serdes *sds,
 	val |= BIT(7); /* force mode bit */
 	return regmap_write(sds->ctrl->map,
 		     RTL931X_SERDES_MODE_CTRL + 4 * (sds->id >> 2), val);
-}
-
-static void rtpcs_931x_sds_disable(struct rtpcs_serdes *sds)
-{
-	regmap_write(sds->ctrl->map,
-		     RTL931X_SERDES_MODE_CTRL + (sds->id >> 2) * 4, 0x9f);
 }
 
 static void rtpcs_931x_sds_symerr_clear(struct rtpcs_serdes *sds,
@@ -2402,8 +2395,7 @@ static void rtpcs_931x_sds_fiber_mode_set(struct rtpcs_serdes *sds,
 
 	/* clear symbol error count before changing mode */
 	rtpcs_931x_sds_symerr_clear(sds, mode);
-
-	rtpcs_931x_sds_disable(sds);
+	rtpcs_931x_sds_mii_set_mode(sds, RTPCS_SDS_MODE_OFF);
 
 	switch (mode) {
 	case PHY_INTERFACE_MODE_SGMII:
