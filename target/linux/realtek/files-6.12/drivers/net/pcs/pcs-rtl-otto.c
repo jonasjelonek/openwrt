@@ -2508,8 +2508,8 @@ static void rtpcs_931x_sds_cmu_type_set(struct rtpcs_serdes *sds,
 }
 
 __maybe_unused
-static void rtpcs_931x_sds_mii_mode_set(struct rtpcs_serdes *sds,
-					enum rtpcs_sds_mode mode)
+static int rtpcs_931x_sds_mii_set_mode(struct rtpcs_serdes *sds,
+				       enum rtpcs_sds_mode mode)
 {
 	u32 val;
 
@@ -2517,8 +2517,11 @@ static void rtpcs_931x_sds_mii_mode_set(struct rtpcs_serdes *sds,
 	case RTPCS_SDS_MODE_OFF:
 		val = 0x1f;
 		break;
+	case RTPCS_SDS_MODE_SGMII:
+		val = 0x02;
+		break;
 	case RTPCS_SDS_MODE_QSGMII:
-		val = 0x6;
+		val = 0x06;
 		break;
 	case RTPCS_SDS_MODE_XSGMII:
 		val = 0x10;
@@ -2529,20 +2532,15 @@ static void rtpcs_931x_sds_mii_mode_set(struct rtpcs_serdes *sds,
 	case RTPCS_SDS_MODE_USXGMII_5GSXGMII:
 	case RTPCS_SDS_MODE_USXGMII_5GDXGMII:
 	case RTPCS_SDS_MODE_USXGMII_2_5GSXGMII:
-	case RTPCS_SDS_MODE_2500BASEX:
-		val = 0xD;
-		break;
-	case RTPCS_SDS_MODE_SGMII:
-		val = 0x2;
+		val = 0x0d;
 		break;
 	default:
-		return;
+		return -EINVAL;
 	}
 
-	val |= (1 << 7);
-
-	regmap_write(sds->ctrl->map,
-		     RTL931X_SERDES_MODE_CTRL + 4 * (sds->id >> 2), val);
+	val |= BIT(7); /* force mode bit */
+	return regmap_write(sds->ctrl->map,
+		     	    RTL931X_SERDES_MODE_CTRL + 4 * (sds->id >> 2), val);
 }
 
 static int rtpcs_931x_sds_cmu_band_set(struct rtpcs_serdes *sds,
