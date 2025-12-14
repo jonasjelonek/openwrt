@@ -2269,6 +2269,64 @@ static int rtpcs_930x_setup_serdes(struct rtpcs_serdes *sds,
 
 /* RTL931X */
 
+static int rtpcs_931x_sds_fiber_get_symerr(struct rtpcs_serdes *sds,
+					    enum rtpcs_sds_mode mode)
+{
+	int symerr, val, val2;
+
+	switch (mode) {
+	case RTPCS_SDS_MODE_10GBASER:
+		symerr = rtpcs_sds_read_bits(sds, 0x5, 0x1, 7, 0);
+		break;
+	case RTPCS_SDS_MODE_1000BASEX:
+		rtpcs_sds_write_bits(sds, 0x41, 24, 2, 0, 0x0);
+
+		val = rtpcs_sds_read_bits(sds, 0x41, 0x3, 15, 8);
+		val2 = rtpcs_sds_read_bits(sds, 0x41, 0x2, 15, 0);
+		symerr = (val << 16) | val2;
+
+		rtpcs_sds_write_bits(sds, 0x41, 3, 15, 8, 0x0);
+		rtpcs_sds_write_bits(sds, 0x41, 2, 15, 0, 0x0);
+		break;
+	default:
+		symerr = -EINVAL;
+	}
+
+	return symerr;
+}
+
+static void rtpcs_931x_sds_clear_symerr(struct rtpcs_serdes *sds,
+					enum rtpcs_sds_mode mode)
+{
+	switch (mode) {
+	case RTPCS_SDS_MODE_OFF:
+		break;
+	case RTPCS_SDS_MODE_SGMII:
+	case RTPCS_SDS_MODE_HISGMII:
+	case RTPCS_SDS_MODE_XSGMII:
+		for (int i = 0; i < 4; ++i) {
+			rtpcs_sds_write_bits(sds, 0x41, 24,  2, 0, i);
+			rtpcs_sds_write_bits(sds, 0x41, 3, 15, 8, 0x0);
+			rtpcs_sds_write_bits(sds, 0x41, 2, 15, 0, 0x0);
+		}
+
+		for (int i = 0; i < 4; ++i) {
+			rtpcs_sds_write_bits(sds, 0x81, 24,  2, 0, i);
+			rtpcs_sds_write_bits(sds, 0x81, 3, 15, 8, 0x0);
+			rtpcs_sds_write_bits(sds, 0x81, 2, 15, 0, 0x0);
+		}
+
+		rtpcs_sds_write_bits(sds, 0x41, 0, 15, 0, 0x0);
+		rtpcs_sds_write_bits(sds, 0x41, 1, 15, 8, 0x0);
+		rtpcs_sds_write_bits(sds, 0x81, 0, 15, 0, 0x0);
+		rtpcs_sds_write_bits(sds, 0x81, 1, 15, 8, 0x0);
+		break;
+	default:
+		rtpcs_931x_sds_fiber_get_symerr(sds, mode);
+		break;
+	}
+}
+
 static int rtpcs_931x_sds_power(struct rtpcs_serdes *sds, bool power_on)
 {
 	u32 en_val = power_on ? 0 : BIT(sds->id);
@@ -2349,64 +2407,6 @@ static int rtpcs_931x_sds_mii_set_mode(struct rtpcs_serdes *sds,
 	val |= BIT(7); /* force mode bit */
 	return regmap_write(sds->ctrl->map,
 		     RTL931X_SERDES_MODE_CTRL + 4 * (sds->id >> 2), val);
-}
-
-static int rtpcs_931x_sds_fiber_get_symerr(struct rtpcs_serdes *sds,
-					   enum rtpcs_sds_mode mode)
-{
-	int symerr, val, val2;
-
-	switch (mode) {
-	case RTPCS_SDS_MODE_10GBASER:
-		symerr = rtpcs_sds_read_bits(sds, 0x5, 0x1, 7, 0);
-		break;
-	case RTPCS_SDS_MODE_1000BASEX:
-		rtpcs_sds_write_bits(sds, 0x41, 24, 2, 0, 0x0);
-
-		val = rtpcs_sds_read_bits(sds, 0x41, 0x3, 15, 8);
-		val2 = rtpcs_sds_read_bits(sds, 0x41, 0x2, 15, 0);
-		symerr = (val << 16) | val2;
-
-		rtpcs_sds_write_bits(sds, 0x41, 3, 15, 8, 0x0);
-		rtpcs_sds_write_bits(sds, 0x41, 2, 15, 0, 0x0);
-		break;
-	default:
-		symerr = -EINVAL;
-	}
-
-	return symerr;
-}
-
-static void rtpcs_931x_sds_clear_symerr(struct rtpcs_serdes *sds,
-					enum rtpcs_sds_mode mode)
-{
-	switch (mode) {
-	case RTPCS_SDS_MODE_OFF:
-		break;
-	case RTPCS_SDS_MODE_SGMII:
-	case RTPCS_SDS_MODE_HISGMII:
-	case RTPCS_SDS_MODE_XSGMII:
-		for (int i = 0; i < 4; ++i) {
-			rtpcs_sds_write_bits(sds, 0x41, 24,  2, 0, i);
-			rtpcs_sds_write_bits(sds, 0x41, 3, 15, 8, 0x0);
-			rtpcs_sds_write_bits(sds, 0x41, 2, 15, 0, 0x0);
-		}
-
-		for (int i = 0; i < 4; ++i) {
-			rtpcs_sds_write_bits(sds, 0x81, 24,  2, 0, i);
-			rtpcs_sds_write_bits(sds, 0x81, 3, 15, 8, 0x0);
-			rtpcs_sds_write_bits(sds, 0x81, 2, 15, 0, 0x0);
-		}
-
-		rtpcs_sds_write_bits(sds, 0x41, 0, 15, 0, 0x0);
-		rtpcs_sds_write_bits(sds, 0x41, 1, 15, 8, 0x0);
-		rtpcs_sds_write_bits(sds, 0x81, 0, 15, 0, 0x0);
-		rtpcs_sds_write_bits(sds, 0x81, 1, 15, 8, 0x0);
-		break;
-	default:
-		rtpcs_931x_sds_fiber_get_symerr(sds, mode);
-		break;
-	}
 }
 
 __always_unused
