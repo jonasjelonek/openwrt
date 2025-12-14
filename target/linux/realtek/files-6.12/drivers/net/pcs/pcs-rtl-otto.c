@@ -2352,12 +2352,12 @@ static int rtpcs_931x_sds_mii_set_mode(struct rtpcs_serdes *sds,
 }
 
 static void rtpcs_931x_sds_symerr_clear(struct rtpcs_serdes *sds,
-					phy_interface_t mode)
+					enum rtpcs_sds_mode mode)
 {
 	switch (mode) {
-	case PHY_INTERFACE_MODE_NA:
+	case RTPCS_SDS_MODE_OFF:
 		break;
-	case PHY_INTERFACE_MODE_XGMII:
+	case RTPCS_SDS_MODE_XSGMII:
 		for (int i = 0; i < 4; ++i) {
 			rtpcs_sds_write_bits(sds, 0x41, 24,  2, 0, i);
 			rtpcs_sds_write_bits(sds, 0x41,  3, 15, 8, 0x0);
@@ -2394,7 +2394,7 @@ static void rtpcs_931x_sds_fiber_mode_set(struct rtpcs_serdes *sds,
 	u32 val;
 
 	/* clear symbol error count before changing mode */
-	rtpcs_931x_sds_symerr_clear(sds, mode);
+	//rtpcs_931x_sds_symerr_clear(sds, mode);
 	rtpcs_931x_sds_mii_set_mode(sds, RTPCS_SDS_MODE_OFF);
 
 	switch (mode) {
