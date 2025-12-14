@@ -106,6 +106,9 @@
 #define RTPCS_931X_PS_SERDES_OFF_MODE_CTRL	(0x13f4)
 #define RTL931X_MAC_SERDES_MODE_CTRL(sds)	(0x136C + (((sds) << 2)))
 
+#define RTPCS_931X_CMU_LC		0x0
+#define RTPCS_931X_CMU_RING		0x1
+
 enum rtpcs_sds_mode {
 	RTPCS_SDS_MODE_OFF = 0,
 
@@ -2505,27 +2508,27 @@ static void rtpcs_931x_sds_cmu_type_set(struct rtpcs_serdes *sds,
 		return; */
 
 	case RTPCS_SDS_MODE_QSGMII:
-		cmu_type = 1;
+		cmu_type = RTPCS_SDS_CMU_RING;
 		frc_cmu_spd = 0;
 		break;
 
 	case RTPCS_SDS_MODE_1000BASEX:
-		cmu_type = 1;
+		cmu_type = RTPCS_SDS_CMU_RING;
 		frc_cmu_spd = 0;
 		break;
 
 /*	case MII_1000BX100BX_AUTO:
-		cmu_type = 1;
+		cmu_type = RTPCS_SDS_CMU_RING;
 		frc_cmu_spd = 0;
 		break; */
 
 	case RTPCS_SDS_MODE_SGMII:
-		cmu_type = 1;
+		cmu_type = RTPCS_SDS_CMU_RING;
 		frc_cmu_spd = 0;
 		break;
 
 	case RTPCS_SDS_MODE_2500BASEX:
-		cmu_type = 1;
+		cmu_type = RTPCS_SDS_CMU_RING;
 		frc_cmu_spd = 1;
 		break;
 
@@ -2534,7 +2537,7 @@ static void rtpcs_931x_sds_cmu_type_set(struct rtpcs_serdes *sds,
 		return;
 	}
 
-	if (cmu_type == 1)
+	if (cmu_type == RTPCS_SDS_CMU_RING)
 		cmu_page = rtpcs_931x_sds_cmu_page_get(mode);
 
 	if (sds == even_sds) { 
@@ -2549,7 +2552,7 @@ static void rtpcs_931x_sds_cmu_type_set(struct rtpcs_serdes *sds,
 		__func__, cmu_type, cmu_page, frc_cmu_spd, even_sds->id,
 		sds->id);
 
-	if (cmu_type == 1) {
+	if (cmu_type == RTPCS_SDS_CMU_RING) {
 		pr_info("%s A CMU page 0x28 0x7 %08x\n", __func__, rtpcs_sds_read(sds, 0x28, 0x7));
 		rtpcs_sds_write_bits(sds, cmu_page, 0x7, 15, 15, 0);
 		pr_info("%s B CMU page 0x28 0x7 %08x\n", __func__, rtpcs_sds_read(sds, 0x28, 0x7));
