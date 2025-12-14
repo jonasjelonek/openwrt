@@ -2806,24 +2806,24 @@ static int rtpcs_931x_setup_serdes(struct rtpcs_serdes *sds,
 	band = rtpcs_931x_sds_cmu_band_get(sds, mode);
 
 	switch (mode) {
-	case PHY_INTERFACE_MODE_USXGMII: /* MII_USXGMII_10GSXGMII/10GDXGMII/10GQXGMII: */
-		sds_mode = RTPCS_SDS_MODE_USXGMII_10GSXGMII;
-		break;
-
-	case PHY_INTERFACE_MODE_10GBASER: /* MII_10GR / MII_10GR1000BX_AUTO: */
-		sds_mode = RTPCS_SDS_MODE_10GBASER;
-		break;
-
 	case PHY_INTERFACE_MODE_1000BASEX: /* MII_1000BX_FIBER */
 		sds_mode = RTPCS_SDS_MODE_1000BASEX;
+		break;
+
+	case PHY_INTERFACE_MODE_2500BASEX:
+		sds_mode = RTPCS_SDS_MODE_2500BASEX;
+		break;
+
+	case PHY_INTERFACE_MODE_10GBASER: /* MII_10GR / MII_10GR1000BX_AUTO */
+		sds_mode = RTPCS_SDS_MODE_10GBASER;
 		break;
 
 	case PHY_INTERFACE_MODE_SGMII:
 		sds_mode = RTPCS_SDS_MODE_SGMII;
 		break;
 
-	case PHY_INTERFACE_MODE_2500BASEX:
-		sds_mode = RTPCS_SDS_MODE_2500BASEX;
+	case PHY_INTERFACE_MODE_USXGMII: /* MII_USXGMII_10GSXGMII/10GDXGMII/10GQXGMII: */
+		sds_mode = RTPCS_SDS_MODE_USXGMII_10GSXGMII;
 		break;
 
 	case PHY_INTERFACE_MODE_QSGMII:
