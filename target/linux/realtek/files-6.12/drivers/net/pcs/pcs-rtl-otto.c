@@ -130,12 +130,17 @@ enum rtpcs_sds_mode {
 	RTPCS_SDS_MODE_MAX,
 };
 
+struct rtpcs_sds_caps {
+	DECLARE_BITMAP(supported_hw_modes, RTPCS_SDS_MODE_MAX);
+};
+
 struct rtpcs_ctrl;
 
 struct rtpcs_serdes {
 	struct rtpcs_ctrl *ctrl;
 	u8 id;
 	enum rtpcs_sds_mode hw_mode;
+	struct rtpcs_sds_caps capabilities;
 
 	bool rx_pol_inv;
 	bool tx_pol_inv;
@@ -167,6 +172,7 @@ struct rtpcs_config {
 	int mac_rx_pause_sts;
 	int mac_tx_pause_sts;
 	u8 serdes_count;
+	const u32 *serdes_hw_mode_caps;
 
 	const struct phylink_pcs_ops *pcs_ops;
 	int (*init_serdes_common)(struct rtpcs_ctrl *ctrl);
@@ -282,6 +288,17 @@ static struct rtpcs_link *rtpcs_phylink_pcs_to_link(struct phylink_pcs *pcs)
 /* Variant-specific functions */
 
 /* RTL838X */
+
+static const u32 rtpcs_838x_sds_hw_mode_caps[RTPCS_838X_SERDES_CNT] = {
+        [0 ... 3] = BIT(RTPCS_SDS_MODE_QSGMII),
+        [4] = BIT(RTPCS_SDS_MODE_SGMII) |
+              BIT(RTPCS_SDS_MODE_QSGMII) |
+              BIT(RTPCS_SDS_MODE_100BASEX) |
+              BIT(RTPCS_SDS_MODE_1000BASEX),
+        [5] = BIT(RTPCS_SDS_MODE_SGMII) |
+	      BIT(RTPCS_SDS_MODE_100BASEX) |
+	      BIT(RTPCS_SDS_MODE_1000BASEX),
+};
 
 #define SDS(ctrl,n)	(&(ctrl)->serdes[n])
 
@@ -569,7 +586,43 @@ static int rtpcs_838x_setup_serdes(struct rtpcs_serdes *sds,
 	return 0;
 }
 
+/* RTL839X */
+
+static const u32 rtpcs_839x_sds_hw_mode_caps[RTPCS_839X_SERDES_CNT] = {
+        [0 ... 11] = BIT(RTPCS_SDS_MODE_QSGMII),
+        [12] = BIT(RTPCS_SDS_MODE_SGMII) |
+               BIT(RTPCS_SDS_MODE_QSGMII) |
+               BIT(RTPCS_SDS_MODE_100BASEX) |
+               BIT(RTPCS_SDS_MODE_1000BASEX),
+        [13] = BIT(RTPCS_SDS_MODE_SGMII) |
+               BIT(RTPCS_SDS_MODE_100BASEX) |
+               BIT(RTPCS_SDS_MODE_1000BASEX),
+};
+
 /* RTL930X */
+
+static const u32 rtpcs_930x_sds_hw_mode_caps[RTPCS_930X_SERDES_CNT] = {
+	[0 ... 1] = BIT(RTPCS_SDS_MODE_QSGMII),
+	[2 ... 9] = BIT(RTPCS_SDS_MODE_SGMII) |
+		    BIT(RTPCS_SDS_MODE_QSGMII) |
+		    BIT(RTPCS_SDS_MODE_HISGMII) |
+		    BIT(RTPCS_SDS_MODE_QHSGMII) |
+		    BIT(RTPCS_SDS_MODE_XSGMII) |
+		    BIT(RTPCS_SDS_MODE_USXGMII_10GSXGMII) |
+		    BIT(RTPCS_SDS_MODE_USXGMII_10GDXGMII) |
+		    BIT(RTPCS_SDS_MODE_USXGMII_10GQXGMII) |
+		    BIT(RTPCS_SDS_MODE_USXGMII_5GSXGMII) |
+		    BIT(RTPCS_SDS_MODE_USXGMII_5GDXGMII) |
+		    BIT(RTPCS_SDS_MODE_USXGMII_2_5GSXGMII) |
+		    BIT(RTPCS_SDS_MODE_100BASEX) |
+		    BIT(RTPCS_SDS_MODE_1000BASEX) |
+		    BIT(RTPCS_SDS_MODE_2500BASEX) |
+		    BIT(RTPCS_SDS_MODE_10GBASER),
+	[10 ... 11] = BIT(RTPCS_SDS_MODE_100BASEX) |
+		      BIT(RTPCS_SDS_MODE_1000BASEX) |
+		      BIT(RTPCS_SDS_MODE_2500BASEX) |
+		      BIT(RTPCS_SDS_MODE_10GBASER),
+};
 
 /* The access registers for SDS_MODE_SEL and the LSB for each SDS within */
 u16 rtpcs_930x_sds_regs[] = { 0x0194, 0x0194, 0x0194, 0x0194, 0x02a0, 0x02a0, 0x02a0, 0x02a0,
@@ -2270,6 +2323,27 @@ static int rtpcs_930x_setup_serdes(struct rtpcs_serdes *sds,
 
 /* RTL931X */
 
+static const u32 rtpcs_931x_sds_hw_mode_caps[RTPCS_931X_SERDES_CNT] = {
+        [0 ... 1] = BIT(RTPCS_SDS_MODE_QSGMII),
+        [2 ... 7] = BIT(RTPCS_SDS_MODE_SGMII) |
+                    BIT(RTPCS_SDS_MODE_QSGMII) |
+                    BIT(RTPCS_SDS_MODE_HISGMII) |
+                    BIT(RTPCS_SDS_MODE_QHSGMII) |
+                    BIT(RTPCS_SDS_MODE_XSGMII) |
+                    BIT(RTPCS_SDS_MODE_USXGMII_10GSXGMII) |
+                    BIT(RTPCS_SDS_MODE_USXGMII_10GDXGMII) |
+                    BIT(RTPCS_SDS_MODE_USXGMII_10GQXGMII) |
+                    BIT(RTPCS_SDS_MODE_USXGMII_5GSXGMII) |
+                    BIT(RTPCS_SDS_MODE_USXGMII_5GDXGMII) |
+                    BIT(RTPCS_SDS_MODE_USXGMII_2_5GSXGMII) |
+                    BIT(RTPCS_SDS_MODE_1000BASEX) |
+                    BIT(RTPCS_SDS_MODE_2500BASEX) |
+                    BIT(RTPCS_SDS_MODE_10GBASER),
+        [8 ... 13] = BIT(RTPCS_SDS_MODE_1000BASEX) |
+                     BIT(RTPCS_SDS_MODE_2500BASEX) |
+                     BIT(RTPCS_SDS_MODE_10GBASER),
+};
+
 static void rtpcs_931x_sds_reset(struct rtpcs_serdes *sds)
 {
 	struct rtpcs_ctrl *ctrl = sds->ctrl;
@@ -3081,6 +3155,13 @@ static int rtpcs_probe(struct platform_device *pdev)
 		sds = &ctrl->serdes[i];
 		sds->ctrl = ctrl;
 		sds->id = i;
+
+		/* this assumes the supplied 'serdes_hw_mode_caps' array has
+		 * exactly has at least 'serdes_count' elements!
+		 */
+		bitmap_from_arr32(sds->capabilities.supported_hw_modes,
+				  ctrl->cfg->serdes_hw_mode_caps,
+				  RTPCS_SDS_MODE_MAX);
 	}
 
 	for_each_child_of_node(dev->of_node, child) {
@@ -3134,6 +3215,7 @@ static const struct rtpcs_config rtpcs_838x_cfg = {
 	.mac_rx_pause_sts	= RTPCS_838X_MAC_RX_PAUSE_STS,
 	.mac_tx_pause_sts	= RTPCS_838X_MAC_TX_PAUSE_STS,
 	.serdes_count		= RTPCS_838X_SERDES_CNT,
+	.serdes_hw_mode_caps	= rtpcs_838x_sds_hw_mode_caps,
 	.pcs_ops		= &rtpcs_838x_pcs_ops,
 	.init_serdes_common	= rtpcs_838x_init_serdes_common,
 	.setup_serdes		= rtpcs_838x_setup_serdes,
@@ -3154,6 +3236,7 @@ static const struct rtpcs_config rtpcs_839x_cfg = {
 	.mac_rx_pause_sts	= RTPCS_839X_MAC_RX_PAUSE_STS,
 	.mac_tx_pause_sts	= RTPCS_839X_MAC_TX_PAUSE_STS,
 	.serdes_count		= RTPCS_839X_SERDES_CNT,
+	.serdes_hw_mode_caps	= rtpcs_839x_sds_hw_mode_caps,
 	.pcs_ops		= &rtpcs_839x_pcs_ops,
 };
 
@@ -3172,6 +3255,7 @@ static const struct rtpcs_config rtpcs_930x_cfg = {
 	.mac_rx_pause_sts	= RTPCS_930X_MAC_RX_PAUSE_STS,
 	.mac_tx_pause_sts	= RTPCS_930X_MAC_TX_PAUSE_STS,
 	.serdes_count		= RTPCS_930X_SERDES_CNT,
+	.serdes_hw_mode_caps	= rtpcs_930x_sds_hw_mode_caps,
 	.pcs_ops		= &rtpcs_930x_pcs_ops,
 	.set_autoneg		= rtpcs_93xx_set_autoneg,
 	.setup_serdes		= rtpcs_930x_setup_serdes,
@@ -3192,6 +3276,7 @@ static const struct rtpcs_config rtpcs_931x_cfg = {
 	.mac_rx_pause_sts	= RTPCS_931X_MAC_RX_PAUSE_STS,
 	.mac_tx_pause_sts	= RTPCS_931X_MAC_TX_PAUSE_STS,
 	.serdes_count		= RTPCS_931X_SERDES_CNT,
+	.serdes_hw_mode_caps	= rtpcs_931x_sds_hw_mode_caps,
 	.pcs_ops		= &rtpcs_931x_pcs_ops,
 	.set_autoneg		= rtpcs_93xx_set_autoneg,
 	.setup_serdes		= rtpcs_931x_setup_serdes,
