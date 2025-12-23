@@ -44,3 +44,20 @@ define Device/xikestor_sks8300-12x-v1
         append-rootfs | pad-rootfs | append-metadata | check-size
 endef
 TARGET_DEVICES += xikestor_sks8300-12x-v1
+
+define Device/zyxel_xs1930
+  SOC := rtl9313
+  DEVICE_VENDOR := Zyxel
+  DEVICE_PACKAGES := kmod-hwmon-lm85
+  FLASH_ADDR := 0xb4280000
+  IMAGE_SIZE := 31808k
+  $(Device/rt-loader-uimage)
+  KERNEL := $$(KERNEL/rt-compress) | uImage lzma
+ifeq ($(IB),)
+  ARTIFACTS := loader.bin
+  ARTIFACT/loader.bin := \
+    rt-loader-standalone | \
+    zynsig
+endif
+endef
+
