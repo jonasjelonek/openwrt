@@ -30,3 +30,17 @@ define Device/plasmacloud_psx28
   DEVICE_PACKAGES += poemgr
 endef
 TARGET_DEVICES += plasmacloud_psx28
+
+define Device/zyxel_xs1930
+  SOC := rtl9313
+  DEVICE_VENDOR := Zyxel
+  DEVICE_PACKAGES := kmod-hwmon-lm85
+  FLASH_ADDR := 0xb4280000
+  IMAGE_SIZE := 31808k
+#  ARTIFACTS := loader.bin
+#  ARTIFACT/loader.bin := \
+#    rt-loader-standalone | \
+#    zynsig
+  $(Device/rt-loader-uimage)
+endef
+
