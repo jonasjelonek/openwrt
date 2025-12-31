@@ -30,6 +30,12 @@ define Build/rt-loader
 	mv "$@.new" "$@"
 endef
 
+define Device/rt-loader-uimage
+	KERNEL/rt-compress := kernel-bin | append-dtb | rt-compress
+	KERNEL := $$(KERNEL/rt-compress) | rt-loader | uImage none
+	KERNEL_INITRAMFS := $$(KERNEL/rt-compress) | uImage lzma | rt-loader
+endef
+
 define Build/rt-loader-no-uimage
         $(MAKE) all clean -C rt-loader CROSS_COMPILE="$(TARGET_CROSS)" \
                 KERNEL_ADDR="$(KERNEL_LOADADDR)" KERNEL_IMG_IN="$@" \
