@@ -2776,7 +2776,7 @@ static int rtpcs_931x_sds_set_port_media(struct rtpcs_serdes *sds,
 					 enum rtpcs_port_media port_media)
 {
 	struct rtpcs_serdes *even_sds = rtpcs_sds_get_even(sds);
-	bool is_10g = false;
+	bool is_dac, is_10g;
 
 	/*
 	 * SDK identifies this as some kind of gating. It's enabled
@@ -2784,7 +2784,6 @@ static int rtpcs_931x_sds_set_port_media(struct rtpcs_serdes *sds,
 	 * (from DMS1250 SDK)
 	 */
 	rtpcs_sds_write_bits(sds, 0x5f, 0x1, 0, 0, 0x1);
-	rtpcs_931x_sds_init_leq_dfe(sds);
 
 	/* media none behavior */
 	rtpcs_sds_write(sds, 0x2e, 0x12, 0x2740);
@@ -2794,7 +2793,11 @@ static int rtpcs_931x_sds_set_port_media(struct rtpcs_serdes *sds,
 	rtpcs_sds_write_bits(sds, 0x2e, 0xf, 5, 0, 0x4);
 
 	rtpcs_sds_write_bits(sds, 0x2a, 0x12, 7, 6, 0x1);
+	/* TODO: can we drop this in favor of turning off SerDes ealier? */
 	rtpcs_931x_sds_set_mode(sds, RTPCS_SDS_MODE_OFF);
+
+	if (port_media == RTPCS_PORT_MEDIA_NONE)
+		return 0;
 
 	rtpcs_sds_write(sds, 0x21, 0x19, 0xf0f0); /* from XS1930-10 SDK */
 	rtpcs_sds_write(even_sds, 0x2e, 0x8, 0x0294);
@@ -2804,44 +2807,32 @@ static int rtpcs_931x_sds_set_port_media(struct rtpcs_serdes *sds,
 	rtpcs_931x_sds_rx_reset(sds);
 	rtpcs_931x_sds_init_leq_dfe(sds);
 
-	switch (port_media) {
-	case RTPCS_PORT_MEDIA_NONE:
-		return 0;
+	is_dac = (port_media == RTPCS_PORT_MEDIA_DAC_50CM ||
+		  port_media == RTPCS_PORT_MEDIA_DAC_100CM ||
+		  port_media == RTPCS_PORT_MEDIA_DAC_300CM);
+	is_10g = is_dac || port_media == RTPCS_PORT_MEDIA_FIBER_10G;
 
+	if (port_media != RTPCS_PORT_MEDIA_FIBER_100M) {
+		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x0);
+		rtpcs_sds_write_bits(sds, 0x2a, 0x7, 15, 15, is_dac ? 0x1 : 0x0);
+		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x3);
+	}
+
+	switch (port_media) {
 	case RTPCS_PORT_MEDIA_DAC_50CM:
 	case RTPCS_PORT_MEDIA_DAC_100CM:
-		is_10g = true;
-
-		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x0);
-		rtpcs_sds_write_bits(sds, 0x2a, 0x7, 15, 15, 0x1);
-		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x3);
-
 		rtpcs_sds_write_bits(sds, 0x2e, 0x1, 15, 0, 0x1340);
 		rtpcs_sds_write(sds, 0x21, 0x19, 0xf0a5); /* from XS1930-10 SDK */
 		rtpcs_sds_write(even_sds, 0x2e, 0x8, 0x02a0);
-		rtpcs_sds_write_bits(sds, 0x6, 0xd, 6, 6, 0x0); /* from DMS1250 SDK */
 		break;
 
 	case RTPCS_PORT_MEDIA_DAC_300CM:
-		is_10g = true;
-
-		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x0);
-		rtpcs_sds_write_bits(sds, 0x2a, 0x7, 15, 15, 0x1);
-		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x3);
-
 		rtpcs_sds_write_bits(sds, 0x2e, 0x1, 15, 0, 0x5200);
 		rtpcs_sds_write(sds, 0x21, 0x19, 0xf0a5); /* from XS1930-10 SDK */
 		rtpcs_sds_write(even_sds, 0x2e, 0x8, 0x02a0);
-		rtpcs_sds_write_bits(sds, 0x6, 0xd, 6, 6, 0x0); /* from DMS1250 SDK */
 		break;
 
 	case RTPCS_PORT_MEDIA_FIBER_10G:
-		is_10g = true;
-
-		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x0);
-		rtpcs_sds_write_bits(sds, 0x2a, 0x7, 15, 15, 0x1);
-		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x3);
-
 		/*
 		 * TODO: this would need to be saved during early init, before
 		 * actually changing any SerDes settings. Then restored here.
@@ -2849,24 +2840,12 @@ static int rtpcs_931x_sds_set_port_media(struct rtpcs_serdes *sds,
 		 */
 		// rtpcs_sds_write(sds, 0x2e, 0x1, phy_rtl9310_10g_tx[unit][sds]);
 		rtpcs_sds_write_bits(sds, 0x2e, 0xf, 5, 0, 0x2); /* from DMS1250 SDK */
-		rtpcs_sds_write_bits(sds, 0x6, 0xd, 6, 6, 0x1); /* from DMS1250 SDK */
 		break;
-
-	case RTPCS_PORT_MEDIA_FIBER_1G:
-		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x0);
-		rtpcs_sds_write_bits(sds, 0x2a, 0x7, 15, 15, 0x0);
-		rtpcs_sds_write_bits(sds, 0x20, 0x0, 11, 10, 0x3);
-
-		rtpcs_sds_write_bits(sds, 0x6, 0xd, 6, 6, 0x1); /* from DMS1250 SDK */
-		break;
-
-	case RTPCS_PORT_MEDIA_FIBER_100M:
-		rtpcs_sds_write_bits(sds, 0x6, 0xd, 6, 6, 0x1);
-		break;
-
 	default:
-		return -ENOTSUPP;
+		break;
 	}
+
+	rtpcs_sds_write_bits(sds, 0x6, 0xd, 6, 6, is_dac ? 0x0 : 0x1);
 
 	if (is_10g) {
 		rtpcs_sds_write(sds, 0x2e, 0x12, 0x27c0);
