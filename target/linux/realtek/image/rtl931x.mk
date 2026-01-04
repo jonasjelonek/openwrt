@@ -53,6 +53,10 @@ TARGET_DEVICES += zyxel_xs1930-10
 define Device/zyxel_xs1930-12f
   $(Device/zyxel_xs1930)
   DEVICE_MODEL := XS1930-12F
-#  FLASH_ADDR := 0xb40c0000
+endef
+
+define Device/zyxel_xs1930-12hp
+  $(Device/zyxel_xs1930)
+  DEVICE_MODEL := XS1930-12HP
 endef
 TARGET_DEVICES += zyxel_xs1930-12f

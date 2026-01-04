@@ -1,0 +1,392 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
+/dts-v1/;
+
+#include "rtl9313_zyxel_xs1930.dtsi"
+
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
+#include <dt-bindings/mux/mux.h>
+
+/ {
+	compatible = "zyxel,xs1930-12hp", "realtek,rtl9313-soc";
+	model = "Zyxel XS1930-12HP";
+
+	/*
+	aliases {
+		led-boot = &led_sys;
+		led-failsafe = &led_sys;
+		led-running = &led_sys;
+		led-upgrade = &led_sys;
+	};
+	*/
+
+	leds {
+		compatible = "gpio-leds";
+
+		led_pwr_green: led-0 {
+			reg = <0>;
+			color = <LED_COLOR_ID_GREEN>;
+			default-state = "on";
+			gpios = <&gpio0 20 GPIO_ACTIVE_HIGH>;
+			label = "pwr:green";
+		};
+		led_pwr_red: led-1 {
+			reg = <1>;
+			color = <LED_COLOR_ID_RED>;
+			gpios = <&gpio0 21 GPIO_ACTIVE_LOW>;
+			label = "pwr:red";
+		};
+		led_sys: led-2 {
+			reg = <2>;
+			color = <LED_COLOR_ID_MULTI>;
+			default-state = "on";
+			function = LED_FUNCTION_ACTIVITY;
+			gpios = <&gpio0 23 GPIO_ACTIVE_LOW>;
+			label = "sys";
+		};
+		led_cloud_green: led-3 {
+			reg = <3>;
+			color = <LED_COLOR_ID_GREEN>;
+			gpios = <&gpio0 24 GPIO_ACTIVE_LOW>;
+			label = "cloud:green";
+		};
+		led_cloud_red: led-4 {
+			reg = <4>;
+			color = <LED_COLOR_ID_RED>;
+			gpios = <&gpio0 25 GPIO_ACTIVE_LOW>;
+			label = "cloud:red";
+		};
+		led_locator: led-5 {
+			reg = <5>;
+			color = <LED_COLOR_ID_BLUE>;
+			function = LED_FUNCTION_INDICATOR;
+			gpios = <&gpio0 26 GPIO_ACTIVE_LOW>;
+			label = "locator";
+		};
+	};
+
+	led_set: led_set@0 {
+		compatible = "realtek,rtl9300-leds";
+		active-low;
+
+		/* Blue | Green | Red */
+		led_set0 = <(RTL93XX_LED_SET_10G | RTL93XX_LED_SET_5G | RTL93XX_LED_SET_2P5G | RTL93XX_LED_SET_LINK | RTL93XX_LED_SET_ACT)
+			    (RTL93XX_LED_SET_2P5G | RTL93XX_LED_SET_1G | RTL93XX_LED_SET_100M | RTL93XX_LED_SET_LINK | RTL93XX_LED_SET_ACT)
+			    (RTL93XX_LED_SET_5G | RTL93XX_LED_SET_100M | RTL93XX_LED_SET_LINK | RTL93XX_LED_SET_ACT)>;
+		led_set1 = <(RTL93XX_LED_SET_10G | RTL93XX_LED_SET_LINK | RTL93XX_LED_SET_ACT)
+			    (RTL93XX_LED_SET_1G | RTL93XX_LED_SET_LINK | RTL93XX_LED_SET_ACT)
+			    RTL93XX_LED_SET_NONE>;
+	};
+
+	sfp_gpio_mux: gpio-mux {
+		compatible = "gpio-mux";
+		mux-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>,
+			    <&gpio0 14 GPIO_ACTIVE_HIGH>;
+		#mux-control-cells = <0>;
+		idle-state = <MUX_IDLE_AS_IS>;
+	};
+
+	sfp1_gpio: sfp-gpio-1 {
+		compatible = "gpio-line-mux";
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		mux-controls = <&sfp_gpio_mux>;
+		muxed-gpio = <&gpio0 19 GPIO_ACTIVE_HIGH>;
+
+		gpio-line-names = "SFP1_LOS", "SFP1_MOD_ABS", "SFP1_TX_FAULT";
+		gpio-line-mux-states = <0>, <1>, <3>;
+	};
+
+	sfp2_gpio: sfp-gpio-2 {
+		compatible = "gpio-line-mux";
+		gpio-controller;
+		#gpio-cells = <2>;
+
+		mux-controls = <&sfp_gpio_mux>;
+		muxed-gpio = <&gpio0 27 GPIO_ACTIVE_HIGH>;
+
+		gpio-line-names = "SFP2_LOS", "SFP2_MOD_ABS", "SFP2_TX_FAULT";
+		gpio-line-mux-states = <0>, <1>, <3>;
+	};
+
+	sfp1: sfp-p1 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c0>;
+		los-gpio = <&sfp1_gpio 0 GPIO_ACTIVE_HIGH>;
+		mod-def0-gpio = <&sfp1_gpio 1 GPIO_ACTIVE_LOW>;
+		tx-disable-gpio = <&gpio0 5 GPIO_ACTIVE_HIGH>;
+		tx-fault-gpio = <&sfp1_gpio 2 GPIO_ACTIVE_HIGH>;
+	};
+
+	sfp2: sfp-p2 {
+		compatible = "sff,sfp";
+		i2c-bus = <&i2c1>;
+		los-gpio = <&sfp2_gpio 0 GPIO_ACTIVE_HIGH>;
+		mod-def0-gpio = <&sfp2_gpio 1 GPIO_ACTIVE_LOW>;
+		tx-disable-gpio = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+		tx-fault-gpio = <&sfp2_gpio 2 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&gpio0 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinmux_disable_jtag>;
+
+	sfp_enable_hog {
+		gpio-hog;
+		gpios = <6 GPIO_ACTIVE_LOW>,
+			<7 GPIO_ACTIVE_LOW>;
+		output-high;
+		line-name = "sfp-enable";
+	};
+};
+
+&i2c_mst1 {
+	status = "okay";
+
+	i2c0: i2c@0 {
+		reg = <0>;
+	};
+	i2c1: i2c@1 {
+		reg = <1>;
+	};
+
+	i2c2: i2c@2 {
+		reg = <2>;
+
+		lm96000: lm96000@2e {
+			compatible = "national,lm85";
+			reg = <0x2e>;
+		};
+	};
+};
+
+&mdio_ctrl {
+	pinctrl-names = "default";
+	pinctrl-0 = <&pinmux_enable_mdc_mdio_0>,
+		    <&pinmux_enable_mdc_mdio_1>,
+		    <&pinmux_enable_mdc_mdio_2>;
+};
+
+&mdio_bus0 {
+	/* AQR813 */
+	phy0: ethernet-phy@0 {
+		reg = <0>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <8>;
+	};
+	phy8: ethernet-phy@8 {
+		reg = <8>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <9>;
+	};
+	phy16: ethernet-phy@16 {
+		reg = <16>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <10>;
+	};
+	phy24: ethernet-phy@24 {
+		reg = <24>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <11>;
+	};
+	phy32: ethernet-phy@32 {
+		reg = <32>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <12>;
+	};
+	phy40: ethernet-phy@40 {
+		reg = <40>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <13>;
+	};
+	phy48: ethernet-phy@48 {
+		reg = <48>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <14>;
+	};
+	phy50: ethernet-phy@50 {
+		reg = <50>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <15>;
+	};
+};
+
+&mdio_bus1 {
+	/* AQR113C */
+	phy52: ethernet-phy@52 {
+		reg = <52>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <0>;
+	};
+};
+
+&mdio_bus2 {
+	/* AQR113C */
+	phy53: ethernet-phy@53 {
+		reg = <53>;
+		compatible = "ethernet-phy-ieee802.3-c45";
+		realtek,smi-address = <8>;
+	};
+};
+
+&switch0 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* Copper ports behind AQR813 */
+		port0: port@0 {
+			reg = <0>;
+			label = SWITCH_PORT_LABEL(1);
+			led-set = <0>;
+			pcs-handle = <&serdes2>;
+			phy-handle = <&phy0>;
+			phy-mode = "usxgmii";
+		};
+		port8: port@8 {
+			reg = <8>;
+			label = SWITCH_PORT_LABEL(2);
+			led-set = <0>;
+			pcs-handle = <&serdes3>;
+			phy-handle = <&phy8>;
+			phy-mode = "usxgmii";
+		};
+		port16: port@16 {
+			reg = <16>;
+			label = SWITCH_PORT_LABEL(3);
+			led-set = <0>;
+			pcs-handle = <&serdes4>;
+			phy-handle = <&phy16>;
+			phy-mode = "usxgmii";
+		};
+		port24: port@24 {
+			reg = <24>;
+			label = SWITCH_PORT_LABEL(4);
+			led-set = <0>;
+			pcs-handle = <&serdes5>;
+			phy-handle = <&phy24>;
+			phy-mode = "usxgmii";
+		};
+
+		port32: port@32 {
+			reg = <32>;
+			label = SWITCH_PORT_LABEL(5);
+			led-set = <0>;
+			pcs-handle = <&serdes6>;
+			phy-handle = <&phy32>;
+			phy-mode = "usxgmii";
+		};
+		port40: port@40 {
+			reg = <40>;
+			label = SWITCH_PORT_LABEL(6);
+			led-set = <0>;
+			pcs-handle = <&serdes7>;
+			phy-handle = <&phy40>;
+			phy-mode = "usxgmii";
+		};
+		port48: port@48 {
+			reg = <48>;
+			label = SWITCH_PORT_LABEL(7);
+			led-set = <0>;
+			pcs-handle = <&serdes8>;
+			phy-handle = <&phy48>;
+			phy-mode = "usxgmii";
+		};
+		port50: port@50 {
+			reg = <50>;
+			label = SWITCH_PORT_LABEL(8);
+			led-set = <0>;
+			pcs-handle = <&serdes9>;
+			phy-handle = <&phy50>;
+			phy-mode = "usxgmii";
+		};
+
+		/* Copper ports behind AQR113C */
+		port52: port@52 {
+			reg = <52>;
+			label = SWITCH_PORT_LABEL(9);
+			led-set = <0>;
+			pcs-handle = <&serdes10>;
+			phy-handle = <&phy52>;
+			phy-mode = "usxgmii";
+		};
+		port53: port@53 {
+			reg = <53>;
+			label = SWITCH_PORT_LABEL(10);
+			led-set = <0>;
+			pcs-handle = <&serdes11>;
+			phy-handle = <&phy53>;
+			phy-mode = "usxgmii";
+		};
+
+		/* SFP+ ports */
+		port@54 {
+			reg = <54>;
+			label = SWITCH_PORT_LABEL(11);
+			led-set = <1>;
+			pcs-handle = <&serdes12>;
+			phy-mode = "1000base-x";
+			sfp = <&sfp1>;
+			managed = "in-band-status";
+		};
+		port@55 {
+			reg = <55>;
+			label = SWITCH_PORT_LABEL(12);
+			led-set = <1>;
+			pcs-handle = <&serdes13>;
+			phy-mode = "1000base-x";
+			sfp = <&sfp2>;
+			managed = "in-band-status";
+		};
+
+		/* CPU port */
+		port@56 {
+			ethernet = <&ethernet0>;
+			reg = <56>;
+			phy-mode = "internal";
+			fixed-link {
+				speed = <1000>;
+				full-duplex;
+			};
+		};
+	};
+};
+
+&serdes6 {
+	realtek,pnswap-rx;
+	realtek,pnswap-tx;
+};
+
+&serdes7 {
+	realtek,pnswap-rx;
+	realtek,pnswap-tx;
+};
+
+&serdes8 {
+	realtek,pnswap-rx;
+	realtek,pnswap-tx;
+};
+
+&serdes9 {
+	realtek,pnswap-rx;
+	realtek,pnswap-tx;
+};
+
+&serdes10 {
+	realtek,pnswap-tx;
+};
+
+&serdes11 {
+	realtek,pnswap-rx;
+};
+
+&serdes12 {
+	realtek,pnswap-tx;
+};
+
+&serdes13 {
+	realtek,pnswap-tx;
+};
