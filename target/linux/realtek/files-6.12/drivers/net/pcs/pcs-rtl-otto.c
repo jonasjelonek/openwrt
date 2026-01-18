@@ -444,6 +444,25 @@ static int rtpcs_sds_determine_hw_mode(struct rtpcs_serdes *sds,
 	return 0;
 }
 
+static int __rtpcs_sds_apply_seq(struct rtpcs_serdes *sds,
+				 const struct rtpcs_sds_config *config,
+				 size_t count)
+{
+	size_t i;
+	int ret;
+
+	for (i = 0; i < count; i++) {
+		ret = rtpcs_sds_write(sds, config[i].page,
+				      config[i].reg, config[i].data);
+		if (ret)
+			return ret;
+	}
+	return 0;
+}
+
+#define rtpcs_sds_apply_seq(sds, cfg) \
+	__rtpcs_sds_apply_seq(sds, cfg, ARRAY_SIZE(cfg))
+
 /* Variant-specific functions */
 
 /* RTL838X */
@@ -2782,9 +2801,7 @@ static void rtpcs_930x_sds_patch(struct rtpcs_serdes *sds,
 				 enum rtpcs_sds_mode hw_mode)
 {
 	struct rtpcs_serdes *even_sds = rtpcs_sds_get_even(sds);
-	const struct rtpcs_sds_config *config;
 	bool is_even_sds;
-	size_t count;
 
 	is_even_sds = (sds == even_sds);
 
@@ -2792,26 +2809,25 @@ static void rtpcs_930x_sds_patch(struct rtpcs_serdes *sds,
 	case RTPCS_SDS_MODE_1000BASEX:
 	case RTPCS_SDS_MODE_SGMII:
 	case RTPCS_SDS_MODE_10GBASER:
-		if (is_even_sds) {
-			config = rtpcs_930x_sds_cfg_10gr_even;
-			count = ARRAY_SIZE(rtpcs_930x_sds_cfg_10gr_even);
-		} else {
-			config = rtpcs_930x_sds_cfg_10gr_odd;
-			count = ARRAY_SIZE(rtpcs_930x_sds_cfg_10gr_odd);
-		}
+		if (is_even_sds)
+			rtpcs_sds_apply_seq(sds, rtpcs_930x_sds_cfg_10gr_even);
+		else
+			rtpcs_sds_apply_seq(sds, rtpcs_930x_sds_cfg_10gr_odd);
+
 		break;
 
 	case RTPCS_SDS_MODE_2500BASEX:
-		if (is_even_sds) {
-			config = rtpcs_930x_sds_cfg_10g_2500bx_even;
-			count = ARRAY_SIZE(rtpcs_930x_sds_cfg_10g_2500bx_even);
-		} else {
-			config = rtpcs_930x_sds_cfg_10g_2500bx_odd;
-			count = ARRAY_SIZE(rtpcs_930x_sds_cfg_10g_2500bx_odd);
-		}
+		if (is_even_sds)
+			rtpcs_sds_apply_seq(sds, rtpcs_930x_sds_cfg_10g_2500bx_even);
+		else
+			rtpcs_sds_apply_seq(sds, rtpcs_930x_sds_cfg_10g_2500bx_odd);
+
 		break;
 
 	case RTPCS_SDS_MODE_XSGMII:
+		const struct rtpcs_sds_config *config;
+		size_t count;
+
 		if (is_even_sds) {
 			config = rtpcs_930x_sds_cfg_xsgmii_even;
 			count = ARRAY_SIZE(rtpcs_930x_sds_cfg_xsgmii_even);
@@ -2830,9 +2846,6 @@ static void rtpcs_930x_sds_patch(struct rtpcs_serdes *sds,
 	default:
 		return;
 	}
-
-	for (size_t i = 0; i < count; ++i)
-		rtpcs_sds_write(sds, config[i].page, config[i].reg, config[i].data);
 
 	if (hw_mode == RTPCS_SDS_MODE_USXGMII_10GQXGMII) {
 		/* Default configuration */
