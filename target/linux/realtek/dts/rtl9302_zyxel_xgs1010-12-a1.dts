@@ -104,9 +104,9 @@
 };
 
 &phy24 {
-	realtek,smi-address = <8>;
+	reg = <8>;
 };
 
 &phy25 {
-	realtek,smi-address = <9>;
+	reg = <9>;
 };

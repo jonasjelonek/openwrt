@@ -872,8 +872,8 @@ static int rtmdio_reset(struct mii_bus *bus)
 
 static int rtmdio_probe(struct platform_device *pdev)
 {
+	struct device_node *ports, *phy, *dn[RTMDIO_MAX_PHY];
 	struct device *dev = &pdev->dev;
-	struct device_node *np, *dn[RTMDIO_MAX_PHY];
 	struct rtmdio_ctrl *ctrl;
 	struct mii_bus *bus;
 	int ret, addr;
@@ -891,31 +891,46 @@ static int rtmdio_probe(struct platform_device *pdev)
 	for (addr = 0; addr < RTMDIO_MAX_PHY; addr++)
 		ctrl->smi_bus[addr] = -1;
 
-	for_each_node_by_name(np, "ethernet-phy") {
-		if (of_property_read_u32(np, "reg", &addr))
+	ports = of_find_node_by_name(NULL, "ethernet-ports");
+	if (!ports)
+		return -ENODEV;
+
+	for_each_child_of_node_scoped(ports, port) {
+		if (of_property_read_u32(port, "reg", &addr))
 			continue;
 
-		if (addr < 0 || addr >= ctrl->cfg->num_phys) {
+		phy = of_parse_phandle(port, "phy-handle", 0);
+		if (!phy)
+			continue;
+
+		if (addr >= ctrl->cfg->num_phys) {
 			dev_err(dev, "illegal address number %d\n", addr);
-			of_node_put(np);
+			of_node_put(phy);
+			of_node_put(ports);
 			return -EINVAL;
 		}
 
-		of_property_read_u32(np->parent, "reg", &ctrl->smi_bus[addr]);
-		if (of_property_read_u32(np, "realtek,smi-address", &ctrl->smi_addr[addr]))
-			ctrl->smi_addr[addr] = addr;
+		if (of_property_read_u32(phy, "reg", &ctrl->smi_addr[addr]) ||
+		    of_property_read_u32(phy->parent, "reg", &ctrl->smi_bus[addr])) {
+			of_node_put(phy);
+			continue;
+		}
 
-		if (ctrl->smi_bus[addr] < 0 || ctrl->smi_bus[addr] >= RTMDIO_MAX_SMI_BUS) {
-			dev_err(dev, "illegal SMI bus number %d\n", ctrl->smi_bus[addr]);
-			of_node_put(np);
+		if (ctrl->smi_bus[addr] >= RTMDIO_MAX_SMI_BUS) {
+			dev_err(dev, "illegal bus number %d\n", ctrl->smi_bus[addr]);
+			of_node_put(phy);
+			of_node_put(ports);
 			return -EINVAL;
 		}
 
-		if (of_device_is_compatible(np, "ethernet-phy-ieee802.3-c45"))
+		if (of_device_is_compatible(phy, "ethernet-phy-ieee802.3-c45"))
 			ctrl->smi_bus_isc45[ctrl->smi_bus[addr]] = true;
 
-		dn[addr] = of_node_get(np);
+		dn[addr] = of_node_get(phy);
+		of_node_put(phy);
 	}
+
+	of_node_put(ports);
 
 	bus->name = "Realtek MDIO bus";
 	bus->reset = rtmdio_reset;
