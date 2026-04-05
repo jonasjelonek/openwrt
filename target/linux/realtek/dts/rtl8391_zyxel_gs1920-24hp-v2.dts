@@ -71,6 +71,16 @@
 			i2c-gpio,delay-us = <2>;
 		};
 	};
+
+	led-set {
+		compatible = "realtek,rtl8390-leds";
+		active-low;
+
+		realtek,leds-per-port = <2>;
+		realtek,ignore-port-mask = <0x00 0xf000000>;
+
+		led_set0 = <RTL839X_LED_LINK_ACT_1G RTL839X_LED_LINK_ACT_100M_10M>;
+        };
 };
 
 &i2c2 {
