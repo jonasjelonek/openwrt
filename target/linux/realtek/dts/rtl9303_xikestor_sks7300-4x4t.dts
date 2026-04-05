@@ -10,11 +10,11 @@
 	model = "XikeStor SKS7300-4X4T";
 
 	aliases {
+		label-mac-device = &ethernet0;
 		led-boot = &led_sys;
 		led-failsafe = &led_sys;
 		led-running = &led_sys;
 		led-upgrade = &led_sys;
-		label-mac-device = &ethernet0;
 	};
 
 	memory@0 {
@@ -65,13 +65,11 @@
 		compatible = "realtek,rtl9300-leds";
 		active-low;
 
-		/*
-		 * LED set 0
-		 *
-		 * - LED[1](Green): 10G/LINK/ACT
-		 * - LED[2](Amber): 10M/100M/1G/2.5G/5G/LINK/ACT
-		 */
-		led_set0 = <0x0baa 0x0a01>;
+		/* [Amber] [Green] */
+		led_set0 = <(RTL93XX_LED_SET_5G | RTL93XX_LED_SET_2P5G | RTL93XX_LED_SET_1G |
+			     RTL93XX_LED_SET_100M | RTL93XX_LED_SET_10M | RTL93XX_LED_SET_LINK |
+			     RTL93XX_LED_SET_ACT)
+			    (RTL93XX_LED_SET_10G | RTL93XX_LED_SET_LINK | RTL93XX_LED_SET_ACT)>;
 	};
 
 	i2c_gpio {
@@ -237,79 +235,27 @@
 };
 
 &mdio_bus0 {
-	phy24: ethernet-phy@24 {
-		compatible = "ethernet-phy-ieee802.3-c45";
-		reg = <24>;
-		realtek,smi-address = <0>;
-	};
+	PHY_C45(24, 0)
 };
 
 &mdio_bus1 {
-	phy25: ethernet-phy@25 {
-		compatible = "ethernet-phy-ieee802.3-c45";
-		reg = <25>;
-		realtek,smi-address = <0>;
-	};
+	PHY_C45(25, 0)
 };
 
 &mdio_bus2 {
-	phy26: ethernet-phy@26 {
-		compatible = "ethernet-phy-ieee802.3-c45";
-		reg = <26>;
-		realtek,smi-address = <0>;
-	};
-
-	phy27: ethernet-phy@27 {
-		compatible = "ethernet-phy-ieee802.3-c45";
-		reg = <27>;
-		realtek,smi-address = <1>;
-	};
+	PHY_C45(26, 0)
+	PHY_C45(27, 1)
 };
 
 &switch0 {
-	ports {
+	ethernet-ports {
 		#address-cells = <1>;
 		#size-cells = <0>;
 
-		port@0 {
-			reg = <0>;
-			label = "lan1";
-			pcs-handle = <&serdes2>;
-			phy-mode = "1000base-x";
-			sfp = <&sfp0>;
-			managed = "in-band-status";
-			led-set = <0>;
-		};
-
-		port@8 {
-			reg = <8>;
-			label = "lan2";
-			pcs-handle = <&serdes3>;
-			phy-mode = "1000base-x";
-			sfp = <&sfp1>;
-			managed = "in-band-status";
-			led-set = <0>;
-		};
-
-		port@16 {
-			reg = <16>;
-			label = "lan3";
-			pcs-handle = <&serdes4>;
-			phy-mode = "1000base-x";
-			sfp = <&sfp2>;
-			managed = "in-band-status";
-			led-set = <0>;
-		};
-
-		port@20 {
-			reg = <20>;
-			label = "lan4";
-			pcs-handle = <&serdes5>;
-			phy-mode = "1000base-x";
-			sfp = <&sfp3>;
-			managed = "in-band-status";
-			led-set = <0>;
-		};
+		SWITCH_PORT_SFP(0, 1, 2, 0, 0)
+		SWITCH_PORT_SFP(8, 2, 3, 0, 1)
+		SWITCH_PORT_SFP(16, 3, 4, 0, 2)
+		SWITCH_PORT_SFP(20, 4, 5, 0, 3)
 
 		SWITCH_PORT_SDS(24, 8, 6, usxgmii)
 		SWITCH_PORT_SDS(25, 7, 7, usxgmii)
@@ -321,7 +267,7 @@
 			reg = <28>;
 			phy-mode = "internal";
 			fixed-link {
-				speed = <10000>;
+				speed = <1000>;
 				full-duplex;
 			};
 		};
