@@ -564,6 +564,50 @@ static int rtl8218b_config_init(struct phy_device *phydev)
 	return 0;
 }
 
+/*
+ * RTL8214FC serial LED init. The PHY has its own LED controller independent from
+ * the switch SoC, supporting up to 36 LEDs via pages 0x280-0x285 in block 8.
+ * Configure 2 LEDs per port: solid on link, blink on activity.
+ *
+ * Per-LED register layout (pages 0x281-0x285):
+ *   [15:12] MDI select: 0-3 = copper port 0-3, 8-11 = fiber 0-3, 0xf = disable
+ *   [11]    1000M link    [7] 1000M activity
+ *   [10]    100M link     [6] 100M activity
+ *   [9]     10M link      [5] 10M activity
+ *
+ * LED-to-register mapping:
+ *   LED 0-5:  page 0x281, regs 18-23
+ *   LED 6-13: page 0x282, regs 16-23
+ */
+static void rtl8214fc_led_init(struct phy_device *phydev)
+{
+	int oldxpage = phy_read(phydev, RTL821x_EXT_PAGE_SELECT);
+
+	phy_write(phydev, RTL821x_EXT_PAGE_SELECT, RTL821X_MEDIA_PAGE_INTERNAL);
+
+	/* Global serial LED config: 32ms blink, 32ms burst, 192ns clock, active-low */
+	phy_write_paged(phydev, 0x280, 16, 0xf0bb);
+
+	/* LED 0-1: Port 0, 10/100M + 1000M (each: solid link, blink activity) */
+	phy_write_paged(phydev, 0x281, 18, 0x0660);
+	phy_write_paged(phydev, 0x281, 19, 0x0880);
+	/* LED 2-3: Port 1 */
+	phy_write_paged(phydev, 0x281, 20, 0x1660);
+	phy_write_paged(phydev, 0x281, 21, 0x1880);
+	/* LED 4-5: Port 2 */
+	phy_write_paged(phydev, 0x281, 22, 0x2660);
+	phy_write_paged(phydev, 0x281, 23, 0x2880);
+	/* LED 6-7: Port 3 */
+	phy_write_paged(phydev, 0x282, 16, 0x3660);
+	phy_write_paged(phydev, 0x282, 17, 0x3880);
+
+	/* Disable unused LEDs 8-13 on page 0x282 */
+	for (int reg = 18; reg <= 23; reg++)
+		phy_write_paged(phydev, 0x282, reg, 0xf000);
+
+	phy_write(phydev, RTL821x_EXT_PAGE_SELECT, oldxpage);
+}
+
 static int rtl8214fc_phy_probe(struct phy_device *phydev)
 {
 	static int regs[] = {16, 19, 20, 21};
@@ -588,6 +632,8 @@ static int rtl8214fc_phy_probe(struct phy_device *phydev)
 		phy_write(phydev, RTL821x_EXT_PAGE_SELECT, RTL821X_MEDIA_PAGE_INTERNAL);
 		for (int port = 0; port < 4; port++)
 			phy_modify_paged(phydev, 0x266, regs[port], 0, GENMASK(11, 10));
+
+		rtl8214fc_led_init(phydev);
 	}
 
 	/* Step 2 - port setup */
