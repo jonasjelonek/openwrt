@@ -183,6 +183,8 @@
 	};
 };
 
+/* global PHY reset on GPIO 2 */
+
 &mdio_bus0 {
 	/* External RTL8224 PHY */
 	phy0: ethernet-phy@0 {
