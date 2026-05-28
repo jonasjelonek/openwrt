@@ -11,7 +11,7 @@
 #include <linux/netdevice.h>
 #include <linux/firmware.h>
 #include <linux/crc32.h>
-#include <linux/sfp.h>
+#include <linux/phy_port.h>
 #include <linux/mii.h>
 #include <linux/mdio.h>
 #include "../phylib.h"
@@ -396,35 +396,32 @@ static int rtl8214fc_write_mmd(struct phy_device *phydev, int devnum, u16 regnum
 	return rtl821x_write_mmd(phydev, devnum, regnum, val);
 }
 
-static int rtl8214fc_sfp_insert(void *upstream, const struct sfp_eeprom_id *id)
+static int rtl8214fc_configure_mii(struct phy_port *port, bool enable,
+				   phy_interface_t interface)
 {
-	struct phy_device *phydev = upstream;
-	const struct sfp_module_caps *caps;
-	phy_interface_t iface;
+	struct phy_device *phydev = port_phydev(port);
 
-	caps = sfp_get_module_caps(phydev->sfp_bus);
-	iface = sfp_select_interface(phydev->sfp_bus, caps->link_modes);
+	if (!phydev)
+		return -ENODEV;
 
-	phydev_info(phydev, "%s SFP module inserted\n", phy_modes(iface));
-
-	rtl8214fc_media_set(phydev, true);
-
+	/* true = fiber, false = copper */
+	rtl8214fc_media_set(phydev, enable);
+	phydev->port = enable ? PORT_FIBRE : PORT_TP;
 	return 0;
 }
 
-static void rtl8214fc_sfp_remove(void *upstream)
-{
-	struct phy_device *phydev = upstream;
-
-	rtl8214fc_media_set(phydev, false);
-}
-
-static const struct sfp_upstream_ops rtl8214fc_sfp_ops = {
-	.attach = phy_sfp_attach,
-	.detach = phy_sfp_detach,
-	.module_insert = rtl8214fc_sfp_insert,
-	.module_remove = rtl8214fc_sfp_remove,
+static const struct phy_port_ops rtl8214fc_mii_port_ops = {
+	.configure_mii = rtl8214fc_configure_mii
 };
+
+static int rtl8214fc_attach_mii_port(struct phy_device *phydev, struct phy_port *port)
+{
+	__set_bit(PHY_INTERFACE_MODE_1000BASEX, port->interfaces);
+	__set_bit(PHY_INTERFACE_MODE_100BASEX, port->interfaces);
+
+	port->ops = &rtl8214fc_mii_port_ops;
+	return 0;
+}
 
 static int rtl8214c_phy_probe(struct phy_device *phydev)
 {
@@ -609,7 +606,8 @@ static int rtl8214fc_phy_probe(struct phy_device *phydev)
 	/* Disable EEE. 0xa5d/0x10 is the same as MDIO_MMD_AN / MDIO_AN_EEE_ADV */
 	phy_write_paged(phydev, 0xa5d, 0x10, 0x0000);
 
-	return phy_sfp_probe(phydev, &rtl8214fc_sfp_ops);
+	phydev->max_n_ports = 4;
+	return ret;
 }
 
 static struct phy_driver rtl83xx_phy_driver[] = {
@@ -638,6 +636,7 @@ static struct phy_driver rtl83xx_phy_driver[] = {
 		.suspend	= rtl8214fc_suspend,
 		.write_mmd	= rtl8214fc_write_mmd,
 		.write_page	= rtl821x_write_page,
+		.attach_mii_port = rtl8214fc_attach_mii_port,
 	},
 	{
 		.match_phy_device = rtl8218b_ext_match_phy_device,
