@@ -5,6 +5,7 @@
 
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/leds/common.h>
 
 / {
 	compatible = "ubnt,usw-pro-max-24-poe", "realtek,rtl9302b-soc";
@@ -172,7 +173,75 @@
 
 	i2c_sfp1: i2c@2 { reg = <2>; };
 	i2c_sfp2: i2c@3 { reg = <3>; };
-	i2c4: i2c@4 { reg = <4>; }; /* Etherlighting MCU at 0x66 */
+	i2c4: i2c@4 {
+		reg = <4>;
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		etherlight@66 {
+			compatible = "ubnt,etherlighting";
+			reg = <0x66>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			boot-mode-gpios = <&gpio2 0 GPIO_ACTIVE_HIGH>;
+			reset-gpios = <&gpio2 7 GPIO_ACTIVE_LOW>;
+
+		#define ETHERLIGHTING_PORT(port) \
+			led@port { \
+				reg = <port>; \
+				color = <LED_COLOR_ID_MULTI>; \
+				function = LED_FUNCTION_LAN; \
+				function-enumerator = <(port + 1)>; \
+				#address-cells = <1>; \
+				#size-cells = <0>; \
+				led@0 { \
+					reg = <0>; \
+					color = <LED_COLOR_ID_RED>; \
+				}; \
+				led@1 { \
+					reg = <1>; \
+					color = <LED_COLOR_ID_GREEN>; \
+				}; \
+				led@2 { \
+					reg = <2>; \
+					color = <LED_COLOR_ID_BLUE>; \
+				}; \
+				led@3 { \
+					reg = <3>; \
+					color = <LED_COLOR_ID_WHITE>; \
+				}; \
+			};
+
+			ETHERLIGHTING_PORT(0)
+			ETHERLIGHTING_PORT(1)
+			ETHERLIGHTING_PORT(2)
+			ETHERLIGHTING_PORT(3)
+			ETHERLIGHTING_PORT(4)
+			ETHERLIGHTING_PORT(5)
+			ETHERLIGHTING_PORT(6)
+			ETHERLIGHTING_PORT(7)
+			ETHERLIGHTING_PORT(8)
+			ETHERLIGHTING_PORT(9)
+			ETHERLIGHTING_PORT(10)
+			ETHERLIGHTING_PORT(11)
+			ETHERLIGHTING_PORT(12)
+			ETHERLIGHTING_PORT(13)
+			ETHERLIGHTING_PORT(14)
+			ETHERLIGHTING_PORT(15)
+			ETHERLIGHTING_PORT(16)
+			ETHERLIGHTING_PORT(17)
+			ETHERLIGHTING_PORT(18)
+			ETHERLIGHTING_PORT(19)
+			ETHERLIGHTING_PORT(20)
+			ETHERLIGHTING_PORT(21)
+			ETHERLIGHTING_PORT(22)
+			ETHERLIGHTING_PORT(23)
+			ETHERLIGHTING_PORT(24)
+			ETHERLIGHTING_PORT(25)
+		};
+	};
 
 	i2c6: i2c@6 {
 		reg = <6>;
