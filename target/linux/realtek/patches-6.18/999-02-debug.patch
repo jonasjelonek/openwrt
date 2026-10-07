@@ -1,0 +1,38 @@
+From 7567d93a373313f076c7b6e36dd96b9de0a43222 Mon Sep 17 00:00:00 2001
+From: Jonas Jelonek <jonas@jonasjelonek.de>
+Date: Wed, 7 Oct 2026 09:23:05 +0000
+Subject: [PATCH 2/2] realtek-pse-mcu: debug
+
+
+diff --git a/drivers/net/pse-pd/realtek-pse-mcu-core.c b/drivers/net/pse-pd/realtek-pse-mcu-core.c
+index 5f9f932e190c..220294a0b60c 100644
+--- a/drivers/net/pse-pd/realtek-pse-mcu-core.c
++++ b/drivers/net/pse-pd/realtek-pse-mcu-core.c
+@@ -465,8 +465,9 @@ static int rtpse_mcu_apply_global_budget(struct rtpse_mcu_ctrl *pse,
+ 					 struct regulator *vmain)
+ {
+ 	u16 budget_raw, previous_budget_raw;
++	u16 readback_raw;
+ 	int budget, ret;
+-	u8 budget_idx;
++	u8 budget_idx, readback_idx;
+ 
+ 	budget = regulator_get_unclaimed_power_budget(vmain);
+ 	if (budget > U16_MAX * RTPSE_MCU_GLOBAL_BUDGET_LSB_MW)
+@@ -495,6 +496,13 @@ static int rtpse_mcu_apply_global_budget(struct rtpse_mcu_ctrl *pse,
+ 		goto err_free_budget;
+ 	}
+ 
++	ret = rtpse_mcu_get_global_budget(pse, &readback_idx, &readback_raw);
++	if (ret)
++		dev_warn(pse->dev, "failed to read back global power budget: %d\n", ret);
++	else
++		dev_info(pse->dev, "global power budget %u: %u mW\n",
++			 readback_idx, readback_raw * RTPSE_MCU_GLOBAL_BUDGET_LSB_MW);
++
+ 	pse->vmain = vmain;
+ 	pse->requested_budget_mW = budget;
+ 	pse->previous_budget_raw = previous_budget_raw;
+-- 
+2.53.0
+
