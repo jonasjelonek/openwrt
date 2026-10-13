@@ -18,6 +18,7 @@
 
 #define RTPCS_SDS_CNT				14
 #define RTPCS_MAX_LINKS_PER_SDS			8
+#define RTPCS_RXCAL_MAX_TRIES			3
 
 #define RTPCS_SPEED_10				0
 #define RTPCS_SPEED_100				1
@@ -552,6 +553,7 @@ struct rtpcs_serdes {
 	bool first_start;
 	struct delayed_work cali_work;
 	bool rxcal_pending;
+	u8 rxcal_tries;
 };
 
 struct rtpcs_ctrl {
@@ -3072,9 +3074,7 @@ static void rtpcs_930x_rx_cali_work_handler(struct work_struct *work)
 {
 	struct rtpcs_serdes *sds, *even_sds;
 	bool calib_failed, rxcal_ready;
-	int calib_tries = 0;
-	u32 latch_sts;
-	int bit, ret;
+	int latch_sts, bit, ret;
 
 	sds = container_of(to_delayed_work(work), struct rtpcs_serdes, cali_work);
 
@@ -3102,31 +3102,41 @@ static void rtpcs_930x_rx_cali_work_handler(struct work_struct *work)
 		goto unlock;
 	}
 
-	do {
-		rtpcs_930x_sds_rxcal_init(sds, sds->hw_mode);
-		rtpcs_930x_sds_rxcal_fgcal(sds);
-		rtpcs_930x_sds_rxcal_vth_tap0_adapt_lock(sds);
+	sds->rxcal_tries++;
+	rtpcs_930x_sds_rxcal_init(sds, sds->hw_mode);
+	rtpcs_930x_sds_rxcal_fgcal(sds);
+	rtpcs_930x_sds_rxcal_vth_tap0_adapt_lock(sds);
 
-		if (sds->hw_mode == RTPCS_SDS_MODE_10GBASER) {
-			rtpcs_930x_sds_rxeq_dfe_taps_adapt(sds);
-			msleep(20);
+	if (sds->hw_mode == RTPCS_SDS_MODE_10GBASER) {
+		rtpcs_930x_sds_rxeq_dfe_taps_adapt(sds);
+		msleep(20);
 
-			latch_sts = rtpcs_sds_read_bits(sds, PAGE_TGR_STD_0, 1, 2, 2);
+		latch_sts = rtpcs_sds_read_bits(sds, PAGE_TGR_STD_0, 1, 2, 2);
+		if (latch_sts >= 0) {
 			usleep_range(1000, 2000);
 			latch_sts = rtpcs_sds_read_bits(sds, PAGE_TGR_STD_0, 1, 2, 2);
-			if (latch_sts) {
-				rtpcs_930x_sds_rxeq_dfe_disable(sds);
-				rtpcs_930x_sds_rxcal_vth_tap0_adapt_lock(sds);
-				rtpcs_930x_sds_rxeq_dfe_taps_adapt(sds);
-			}
 		}
+		if (latch_sts < 0) {
+			dev_err(sds->ctrl->dev, "SerDes %u: RX latch read failed: %d\n",
+				 sds->id, latch_sts);
+			goto terminate;
+		}
+		if (latch_sts) {
+			rtpcs_930x_sds_rxeq_dfe_disable(sds);
+			rtpcs_930x_sds_rxcal_vth_tap0_adapt_lock(sds);
+			rtpcs_930x_sds_rxeq_dfe_taps_adapt(sds);
+		}
+	}
 
-		calib_tries++;
-		msleep(50);
-		calib_failed = rtpcs_930x_sds_check_calibration(sds, sds->hw_mode);
-	} while (calib_failed && calib_tries < 3);
-	if (calib_failed)
+	msleep(50);
+	calib_failed = rtpcs_930x_sds_check_calibration(sds, sds->hw_mode);
+	if (calib_failed) {
+		if (sds->rxcal_tries < RTPCS_RXCAL_MAX_TRIES) {
+			schedule_delayed_work(&sds->cali_work, msecs_to_jiffies(2000));
+			goto unlock;
+		}
 		dev_warn(sds->ctrl->dev, "SerDes %u: RX calibration ultimately failed\n", sds->id);
+	}
 
 terminate:
 	sds->rxcal_pending = false;
@@ -3418,6 +3428,7 @@ static int rtpcs_930x_sds_post_config(struct rtpcs_serdes *sds, enum rtpcs_sds_m
 
 	rtpcs_930x_sds_rxcal_init(sds, hw_mode);
 
+	sds->rxcal_tries = 0;
 	sds->rxcal_pending = true;
 	mod_delayed_work(system_wq, &sds->cali_work, msecs_to_jiffies(1000));
 	return 0;
