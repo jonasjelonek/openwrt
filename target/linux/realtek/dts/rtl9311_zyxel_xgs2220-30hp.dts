@@ -8,6 +8,31 @@
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/mux/mux.h>
 
+#define HASH_ADDRESS_CELLS #address-cells
+#define HASH_SIZE_CELLS #size-cells
+
+#define RTL8218E_PHY_LEDS(p, led0, led1) \
+&phy##p { \
+	leds { \
+		HASH_ADDRESS_CELLS = <1>; \
+		HASH_SIZE_CELLS = <0>; \
+		led@led0 { \
+			reg = <0x##led0>; \
+			color = <LED_COLOR_ID_ORANGE>; \
+			function = LED_FUNCTION_LAN; \
+			active-low; \
+			default-state = "keep"; \
+		}; \
+		led@led1 { \
+			reg = <0x##led1>; \
+			color = <LED_COLOR_ID_GREEN>; \
+			function = LED_FUNCTION_LAN; \
+			active-low; \
+			default-state = "keep"; \
+		}; \
+	}; \
+};
+
 / {
 	compatible = "zyxel,xgs2220-30hp", "realtek,rtl9311-soc";
 	model = "Zyxel XGS2220-30HP";
@@ -424,6 +449,33 @@
 	PHY_C45(48, 0)
 	PHY_C45(50, 8)
 };
+
+RTL8218E_PHY_LEDS(0, 14, 15)
+RTL8218E_PHY_LEDS(1, 16, 17)
+RTL8218E_PHY_LEDS(2, 18, 19)
+RTL8218E_PHY_LEDS(3, 1a, 1b)
+RTL8218E_PHY_LEDS(4, 1c, 1d)
+RTL8218E_PHY_LEDS(5, 1e, 1f)
+RTL8218E_PHY_LEDS(6, 20, 21)
+RTL8218E_PHY_LEDS(7, 22, 23)
+
+RTL8218E_PHY_LEDS(8, 14, 15)
+RTL8218E_PHY_LEDS(9, 16, 17)
+RTL8218E_PHY_LEDS(10, 18, 19)
+RTL8218E_PHY_LEDS(11, 1a, 1b)
+RTL8218E_PHY_LEDS(12, 1c, 1d)
+RTL8218E_PHY_LEDS(13, 1e, 1f)
+RTL8218E_PHY_LEDS(14, 20, 21)
+RTL8218E_PHY_LEDS(15, 22, 23)
+
+RTL8218E_PHY_LEDS(16, 14, 15)
+RTL8218E_PHY_LEDS(17, 16, 17)
+RTL8218E_PHY_LEDS(18, 18, 19)
+RTL8218E_PHY_LEDS(19, 1a, 1b)
+RTL8218E_PHY_LEDS(20, 1c, 1d)
+RTL8218E_PHY_LEDS(21, 1e, 1f)
+RTL8218E_PHY_LEDS(22, 20, 21)
+RTL8218E_PHY_LEDS(23, 22, 23)
 
 &switch0 {
 	ethernet-ports {

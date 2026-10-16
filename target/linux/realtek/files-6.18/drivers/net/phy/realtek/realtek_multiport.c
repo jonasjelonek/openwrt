@@ -50,6 +50,37 @@
 
 #define RTL8214FC_MEDIA_COPPER		BIT(11)
 
+/* Serial LED controller used by RTL8218D and RTL8218E. */
+#define RTL8218X_LED_CFG_PAGE		0x0280
+#define RTL8218X_LED_CFG_REG		0x10
+#define RTL8218X_LED_CFG_MODE		GENMASK(15, 14)
+#define RTL8218X_LED_CFG_MODE_1		BIT(14)
+#define RTL8218X_LED_CFG_CLOCK		GENMASK(5, 4)
+#define RTL8218X_LED_CFG_CLOCK_192NS	GENMASK(5, 4)
+#define RTL8218X_LED_CFG_ACTIVE_LOW	BIT(3)
+#define RTL8218X_LED_CFG_DISABLE		BIT(2)
+#define RTL8218X_LED_CFG_CLK_EN		BIT(1)
+#define RTL8218X_LED_CFG_DATA_EN		BIT(0)
+
+#define RTL8218X_LED_COUNT		36
+#define RTL8218X_LED_MDI			GENMASK(15, 12)
+#define RTL8218X_LED_LINK_MASK		GENMASK(11, 9)
+#define RTL8218X_LED_LINK_1000		BIT(11)
+#define RTL8218X_LED_LINK_100		BIT(10)
+#define RTL8218X_LED_LINK_10		BIT(9)
+#define RTL8218X_LED_ACT_MASK		GENMASK(7, 5)
+#define RTL8218X_LED_ACT_SHIFT		4
+#define RTL8218X_LED_ACT_1000		BIT(7)
+#define RTL8218X_LED_ACT_100		BIT(6)
+#define RTL8218X_LED_ACT_10		BIT(5)
+
+#define RTL8218X_LED_DEFAULT_LOW_SPEED	(RTL8218X_LED_LINK_100 | \
+					 RTL8218X_LED_LINK_10 | \
+					 RTL8218X_LED_ACT_100 | \
+					 RTL8218X_LED_ACT_10)
+#define RTL8218X_LED_DEFAULT_GIGABIT	(RTL8218X_LED_LINK_1000 | \
+					 RTL8218X_LED_ACT_1000)
+
 #define PHY_ID_RTL8214C			0x001cc942
 #define PHY_ID_RTL8218B_E		0x001cc980
 #define PHY_ID_RTL8214_OR_8218		0x001cc981
@@ -66,6 +97,13 @@
 struct rtl821x_shared_priv {
 	int base_addr;
 	int ports;
+};
+
+struct rtl8218x_shared_priv {
+	int base_addr;
+	unsigned long led_polarity;
+	/* Protected by the MDIO bus lock; clear after package reset or power loss. */
+	bool initialized;
 };
 
 static int rtl821x_package_join(struct phy_device *phydev, int ports)
@@ -444,6 +482,280 @@ static const struct sfp_upstream_ops rtl8214fc_sfp_ops = {
 	.module_remove = rtl8214fc_sfp_remove,
 };
 
+/* Caller holds the MDIO bus lock; accesses do not require a base phy_device. */
+static int __rtl8218x_led_reg_modify(struct phy_device *phydev, u16 page,
+				     u16 reg, u16 mask, u16 set, u16 *old)
+{
+	int oldpage, oldxpage, val;
+	int ret, restore_ret;
+
+	oldpage = __phy_package_read(phydev, 0, RTL821x_PAGE_SELECT);
+	if (oldpage < 0)
+		return oldpage;
+
+	ret = __phy_package_write(phydev, 0, RTL821x_PAGE_SELECT,
+				  RTL8XXX_PAGE_MAIN);
+	if (ret)
+		goto restore_page;
+
+	oldxpage = __phy_package_read(phydev, 0, RTL821x_EXT_PAGE_SELECT);
+	if (oldxpage < 0) {
+		ret = oldxpage;
+		goto restore_page;
+	}
+
+	ret = __phy_package_write(phydev, 0, RTL821x_EXT_PAGE_SELECT,
+				  RTL821X_MEDIA_PAGE_INTERNAL);
+	if (ret)
+		goto restore_xpage;
+
+	ret = __phy_package_write(phydev, 0, RTL821x_PAGE_SELECT, page);
+	if (ret)
+		goto restore_xpage;
+
+	val = __phy_package_read(phydev, 0, reg);
+	if (val < 0) {
+		ret = val;
+		goto restore_xpage;
+	}
+
+	if (old)
+		*old = val;
+
+	if (mask)
+		ret = __phy_package_write(phydev, 0, reg,
+					  (val & ~mask) | (set & mask));
+
+restore_xpage:
+	restore_ret = __phy_package_write(phydev, 0, RTL821x_PAGE_SELECT,
+					  RTL8XXX_PAGE_MAIN);
+	if (!restore_ret)
+		restore_ret = __phy_package_write(phydev, 0, RTL821x_EXT_PAGE_SELECT, oldxpage);
+	if (!ret)
+		ret = restore_ret;
+
+restore_page:
+	restore_ret = __phy_package_write(phydev, 0, RTL821x_PAGE_SELECT, oldpage);
+	if (!ret)
+		ret = restore_ret;
+
+	return ret;
+}
+
+static int rtl8218x_led_reg_modify(struct phy_device *phydev, u16 page,
+				   u16 reg, u16 mask, u16 set, u16 *old)
+{
+	int ret;
+
+	phy_lock_mdio_bus(phydev);
+	ret = __rtl8218x_led_reg_modify(phydev, page, reg, mask, set, old);
+	phy_unlock_mdio_bus(phydev);
+
+	return ret;
+}
+
+static int rtl8218x_led_slot_modify(struct phy_device *phydev, u8 index,
+				    u16 mask, u16 set, u16 *old)
+{
+	u16 page, reg;
+
+	if (index >= RTL8218X_LED_COUNT)
+		return -EINVAL;
+
+	if (index < 6) {
+		page = 0x281;
+		reg = 18 + index;
+	} else {
+		page = 0x282 + (index - 6) / 8;
+		reg = 16 + (index - 6) % 8;
+	}
+
+	return rtl8218x_led_reg_modify(phydev, page, reg, mask, set, old);
+}
+
+static int rtl8218x_led_hw_is_supported(struct phy_device *phydev, u8 index,
+					unsigned long rules)
+{
+	const unsigned long activity = BIT(TRIGGER_NETDEV_RX) |
+					       BIT(TRIGGER_NETDEV_TX);
+	const unsigned long link_speeds = BIT(TRIGGER_NETDEV_LINK_10) |
+						  BIT(TRIGGER_NETDEV_LINK_100) |
+						  BIT(TRIGGER_NETDEV_LINK_1000);
+	const unsigned long link = BIT(TRIGGER_NETDEV_LINK) | link_speeds;
+
+	if (index >= RTL8218X_LED_COUNT)
+		return -EINVAL;
+
+	if (rules & ~(link | activity))
+		return -EOPNOTSUPP;
+
+	if ((rules & BIT(TRIGGER_NETDEV_LINK)) && (rules & link_speeds))
+		return -EOPNOTSUPP;
+	if ((rules & link_speeds) == link_speeds)
+		return -EOPNOTSUPP;
+
+	/* The speed-qualified activity signals do not distinguish RX and TX. */
+	if ((rules & activity) && (rules & activity) != activity)
+		return -EOPNOTSUPP;
+
+	/* Activity is speed-qualified and cannot be selected without link. */
+	if ((rules & activity) && !(rules & link))
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+
+static int rtl8218x_led_hw_control_set(struct phy_device *phydev, u8 index,
+				       unsigned long rules)
+{
+	struct rtl8218x_shared_priv *priv = phy_package_get_priv(phydev);
+	u16 link = 0, activity = 0;
+	int mdi = phydev->mdio.addr - priv->base_addr;
+	int ret;
+
+	ret = rtl8218x_led_hw_is_supported(phydev, index, rules);
+	if (ret)
+		return ret;
+
+	if (test_bit(TRIGGER_NETDEV_LINK, &rules) ||
+	    test_bit(TRIGGER_NETDEV_LINK_10, &rules))
+		link |= RTL8218X_LED_LINK_10;
+
+	if (test_bit(TRIGGER_NETDEV_LINK, &rules) ||
+	    test_bit(TRIGGER_NETDEV_LINK_100, &rules))
+		link |= RTL8218X_LED_LINK_100;
+
+	if (test_bit(TRIGGER_NETDEV_LINK, &rules) ||
+	    test_bit(TRIGGER_NETDEV_LINK_1000, &rules))
+		link |= RTL8218X_LED_LINK_1000;
+
+	if (test_bit(TRIGGER_NETDEV_RX, &rules))
+		activity = link >> RTL8218X_LED_ACT_SHIFT;
+
+	return rtl8218x_led_slot_modify(phydev, index, GENMASK(15, 0),
+					(mdi << 12) | link | activity, NULL);
+}
+
+static int rtl8218x_led_hw_control_get(struct phy_device *phydev, u8 index,
+				       unsigned long *rules)
+{
+	struct rtl8218x_shared_priv *priv = phy_package_get_priv(phydev);
+	int mdi = phydev->mdio.addr - priv->base_addr;
+	u16 activity, link, val;
+	int ret;
+
+	ret = rtl8218x_led_slot_modify(phydev, index, 0, 0, &val);
+	if (ret)
+		return ret;
+
+	if ((val & RTL8218X_LED_MDI) != mdi << 12)
+		return -EOPNOTSUPP;
+
+	if (val & ~(RTL8218X_LED_MDI | RTL8218X_LED_LINK_MASK |
+		    RTL8218X_LED_ACT_MASK))
+		return -EOPNOTSUPP;
+
+	link = val & RTL8218X_LED_LINK_MASK;
+	activity = val & RTL8218X_LED_ACT_MASK;
+	if (activity && activity != link >> RTL8218X_LED_ACT_SHIFT)
+		return -EOPNOTSUPP;
+
+	if (link == RTL8218X_LED_LINK_MASK) {
+		__set_bit(TRIGGER_NETDEV_LINK, rules);
+	} else {
+		if (link & RTL8218X_LED_LINK_10)
+			__set_bit(TRIGGER_NETDEV_LINK_10, rules);
+		if (link & RTL8218X_LED_LINK_100)
+			__set_bit(TRIGGER_NETDEV_LINK_100, rules);
+		if (link & RTL8218X_LED_LINK_1000)
+			__set_bit(TRIGGER_NETDEV_LINK_1000, rules);
+	}
+	if (activity) {
+		__set_bit(TRIGGER_NETDEV_RX, rules);
+		__set_bit(TRIGGER_NETDEV_TX, rules);
+	}
+
+	return 0;
+}
+
+static int rtl8218x_led_polarity_set(struct phy_device *phydev, int index,
+				     unsigned long modes)
+{
+	struct rtl8218x_shared_priv *shared_priv = phy_package_get_priv(phydev);
+	u16 polarity;
+	int ret;
+
+	if (index < 0 || index >= RTL8218X_LED_COUNT)
+		return -EINVAL;
+
+	if (modes == BIT(PHY_LED_ACTIVE_LOW))
+		polarity = RTL8218X_LED_CFG_ACTIVE_LOW;
+	else if (modes == BIT(PHY_LED_ACTIVE_HIGH))
+		polarity = 0;
+	else
+		return -EOPNOTSUPP;
+
+	phy_lock_mdio_bus(phydev);
+	if (shared_priv->led_polarity && shared_priv->led_polarity != modes) {
+		ret = -EOPNOTSUPP;
+		goto unlock;
+	}
+
+	ret = __rtl8218x_led_reg_modify(phydev, RTL8218X_LED_CFG_PAGE,
+					RTL8218X_LED_CFG_REG,
+					RTL8218X_LED_CFG_ACTIVE_LOW,
+					polarity, NULL);
+	if (!ret)
+		shared_priv->led_polarity = modes;
+
+unlock:
+	phy_unlock_mdio_bus(phydev);
+
+	return ret;
+}
+
+static int rtl8218x_led_config_init(struct phy_device *phydev)
+{
+	struct rtl8218x_shared_priv *shared_priv = phy_package_get_priv(phydev);
+	struct phy_led *led;
+	int mdi = phydev->mdio.addr - shared_priv->base_addr;
+	u16 config_mask, config_set, val;
+	int ret;
+
+	if (list_empty(&phydev->leds))
+		return 0;
+
+	config_mask = RTL8218X_LED_CFG_MODE | RTL8218X_LED_CFG_CLOCK |
+		      RTL8218X_LED_CFG_DISABLE | RTL8218X_LED_CFG_CLK_EN |
+		      RTL8218X_LED_CFG_DATA_EN;
+	config_set = RTL8218X_LED_CFG_MODE_1 | RTL8218X_LED_CFG_CLOCK_192NS |
+		     RTL8218X_LED_CFG_CLK_EN | RTL8218X_LED_CFG_DATA_EN;
+	if (shared_priv->led_polarity) {
+		config_mask |= RTL8218X_LED_CFG_ACTIVE_LOW;
+		if (shared_priv->led_polarity == BIT(PHY_LED_ACTIVE_LOW))
+			config_set |= RTL8218X_LED_CFG_ACTIVE_LOW;
+	}
+
+	/* Package-global and idempotent; repeat it so a failed access can retry. */
+	ret = rtl8218x_led_reg_modify(phydev, RTL8218X_LED_CFG_PAGE,
+				      RTL8218X_LED_CFG_REG,
+				      config_mask, config_set, NULL);
+	if (ret)
+		return ret;
+
+	list_for_each_entry(led, &phydev->leds, list) {
+		val = led->index & 1 ? RTL8218X_LED_DEFAULT_GIGABIT :
+				      RTL8218X_LED_DEFAULT_LOW_SPEED;
+		ret = rtl8218x_led_slot_modify(phydev, led->index,
+					     GENMASK(15, 0),
+					     (mdi << 12) | val, NULL);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
+}
+
 static int rtl8214c_phy_probe(struct phy_device *phydev)
 {
 	rtl821x_package_join(phydev, 4);
@@ -451,7 +763,7 @@ static int rtl8214c_phy_probe(struct phy_device *phydev)
 	return 0;
 }
 
-static int rtl8218x_phy_probe(struct phy_device *phydev)
+static int rtl8218b_phy_probe(struct phy_device *phydev)
 {
 	rtl821x_package_join(phydev, 8);
 
@@ -467,15 +779,11 @@ static int rtl821x_config_init(struct phy_device *phydev)
 	return 0;
 }
 
-struct rtl8218e_shared_priv {
-	/* Protected by the MDIO bus lock. */
-	bool initialized;
-};
-
-static int rtl8218e_phy_probe(struct phy_device *phydev)
+static int rtl8218x_phy_probe(struct phy_device *phydev)
 {
 	struct device *dev = &phydev->mdio.dev;
 	u32 base_addr = phydev->mdio.addr & ~7;
+	struct rtl8218x_shared_priv *priv;
 	struct device_node *np;
 	int ret;
 
@@ -484,24 +792,25 @@ static int rtl8218e_phy_probe(struct phy_device *phydev)
 		ret = of_property_read_u32(np, "reg", &base_addr);
 		of_node_put(np);
 		if (ret)
-			return dev_err_probe(dev, ret,
-					     "Missing or invalid PHY package reg\n");
+			return dev_err_probe(dev, ret, "Missing or invalid PHY package reg\n");
 
 		if (base_addr > PHY_MAX_ADDR - 8 ||
 		    phydev->mdio.addr < base_addr ||
 		    phydev->mdio.addr - base_addr >= 8)
 			return dev_err_probe(dev, -EINVAL,
-					     "Invalid RTL8218E package address range\n");
+					     "Invalid RTL8218x package address range\n");
 
-		ret = devm_of_phy_package_join(dev, phydev, sizeof(struct rtl8218e_shared_priv));
+		ret = devm_of_phy_package_join(dev, phydev, sizeof(*priv));
 	} else {
 		of_node_put(np);
 		/* Without a package node, assume eight aligned PHY addresses. */
-		ret = devm_phy_package_join(dev, phydev, base_addr,
-					    sizeof(struct rtl8218e_shared_priv));
+		ret = devm_phy_package_join(dev, phydev, base_addr, sizeof(*priv));
 	}
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to join PHY package\n");
+
+	priv = phy_package_get_priv(phydev);
+	priv->base_addr = base_addr;
 
 	return 0;
 }
@@ -603,7 +912,7 @@ restore:
 
 static int rtl8218e_config_init(struct phy_device *phydev)
 {
-	struct rtl8218e_shared_priv *priv = phy_package_get_priv(phydev);
+	struct rtl8218x_shared_priv *priv = phy_package_get_priv(phydev);
 	int ret;
 
 	/* Disable PHY-mode EEE on this port so LPI is passed to the MAC. */
@@ -620,19 +929,27 @@ static int rtl8218e_config_init(struct phy_device *phydev)
 			priv->initialized = true;
 	}
 	phy_unlock_mdio_bus(phydev);
+	if (ret)
+		return ret;
 
-	return ret;
+	return rtl8218x_led_config_init(phydev);
 }
 
 static int rtl8218d_config_init(struct phy_device *phydev)
 {
+	struct rtl8218x_shared_priv *priv = phy_package_get_priv(phydev);
 	int oldpage, oldxpage;
 	bool is_qsgmii;
 	int chip_info;
+	int ret;
 
 	rtl821x_config_init(phydev);
 
-	if (phydev->mdio.addr % 8)
+	ret = rtl8218x_led_config_init(phydev);
+	if (ret)
+		return ret;
+
+	if (phydev->mdio.addr != priv->base_addr)
 		return 0;
 	/*
 	 * The RTl8218D has two MAC (aka SoC side) operation modes. Either dual QSGMII
@@ -819,7 +1136,7 @@ static struct phy_driver rtl83xx_phy_driver[] = {
 		.name		= "Realtek RTL8218B (external)",
 		.config_init	= rtl8218b_config_init,
 		.features	= PHY_GBIT_FEATURES,
-		.probe		= rtl8218x_phy_probe,
+		.probe		= rtl8218b_phy_probe,
 		.read_mmd	= rtl821x_read_mmd,
 		.read_page	= rtl821x_read_page,
 		.resume		= genphy_resume,
@@ -832,7 +1149,7 @@ static struct phy_driver rtl83xx_phy_driver[] = {
 		.name		= "Realtek RTL8218B (internal)",
 		.config_init	= rtl821x_config_init,
 		.features	= PHY_GBIT_FEATURES,
-		.probe		= rtl8218x_phy_probe,
+		.probe		= rtl8218b_phy_probe,
 		.read_mmd	= rtl821x_read_mmd,
 		.read_page	= rtl821x_read_page,
 		.resume		= genphy_resume,
@@ -852,19 +1169,27 @@ static struct phy_driver rtl83xx_phy_driver[] = {
 		.suspend	= genphy_suspend,
 		.write_mmd	= rtl821x_write_mmd,
 		.write_page	= rtl821x_write_page,
+		.led_hw_is_supported = rtl8218x_led_hw_is_supported,
+		.led_hw_control_get = rtl8218x_led_hw_control_get,
+		.led_hw_control_set = rtl8218x_led_hw_control_set,
+		.led_polarity_set = rtl8218x_led_polarity_set,
 	},
 	{
 		PHY_ID_MATCH_EXACT(PHY_ID_RTL8218E),
 		.name		= "REALTEK RTL8218E",
 		.config_init	= rtl8218e_config_init,
 		.features	= PHY_GBIT_FEATURES,
-		.probe		= rtl8218e_phy_probe,
+		.probe		= rtl8218x_phy_probe,
 		.read_mmd	= rtl821x_read_mmd,
 		.read_page	= rtl821x_read_page,
 		.resume		= genphy_resume,
 		.suspend	= genphy_suspend,
 		.write_mmd	= rtl821x_write_mmd,
 		.write_page	= rtl821x_write_page,
+		.led_hw_is_supported = rtl8218x_led_hw_is_supported,
+		.led_hw_control_get = rtl8218x_led_hw_control_get,
+		.led_hw_control_set = rtl8218x_led_hw_control_set,
+		.led_polarity_set = rtl8218x_led_polarity_set,
 	},
 };
 
