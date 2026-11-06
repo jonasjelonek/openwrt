@@ -23,6 +23,8 @@
 #define RTPCS_RXCAL_POLL_MS			500
 #define RTPCS_RXCAL_MAX_TRIES			3
 #define RTPCS_RXCAL_RETRY_MS			1000
+#define RTPCS_RXCAL_NUDGE_MS			30000
+#define RTPCS_RXCAL_NUDGE_MAX			3
 #define RTPCS_RXCAL_XSG_MAX_ERR_DELTA		100
 #define RTPCS_RXCAL_XSG_ERR_SATURATION		0xffff00
 #define RTPCS_RXMON_POLL_MS			500
@@ -586,6 +588,8 @@ struct rtpcs_serdes {
 	struct delayed_work cali_work;
 	enum rtpcs_rx_phase rx_phase;
 	u8 rxcal_tries;
+	u8 rxcal_nudges;
+	u64 rxcal_idle_since;
 	struct delayed_work linkmon_work;
 	u8 rxmon_down;
 	u64 rxmon_recovery_after;
@@ -2057,6 +2061,7 @@ static void rtpcs_93xx_sds_arm_rxcal(struct rtpcs_serdes *sds, unsigned int dela
 	lockdep_assert_held(&sds->ctrl->lock);
 
 	sds->rxcal_tries = 0;
+	sds->rxcal_idle_since = 0;
 	sds->rx_phase = RTPCS_RX_PHASE_CALIBRATION;
 	mod_delayed_work(system_wq, &sds->cali_work, msecs_to_jiffies(delay_ms));
 }
@@ -2069,6 +2074,53 @@ static void rtpcs_93xx_sds_arm_linkmon(struct rtpcs_serdes *sds)
 	sds->rx_phase = RTPCS_RX_PHASE_MONITORING;
 	dev_dbg(sds->ctrl->dev, "SerDes %u: RX link monitor armed\n", sds->id);
 	mod_delayed_work(system_wq, &sds->linkmon_work, msecs_to_jiffies(RTPCS_RXMON_POLL_MS));
+}
+
+static int rtpcs_sds_reconfigure_attachment(struct rtpcs_serdes *sds);
+
+/*
+ * A DAC lane can stay without RX signal after a cold boot until the module is
+ * re-inserted. Run the attachment reconfiguration of the insert path a bounded
+ * number of times, with growing spacing.
+ */
+static void rtpcs_93xx_sds_rxcal_nudge(struct rtpcs_serdes *sds)
+{
+	u64 now = get_jiffies_64();
+	unsigned int idle_ms;
+	int ret;
+
+	if (sds->attachment != RTPCS_SDS_ATTACH_DAC_SHORT &&
+	    sds->attachment != RTPCS_SDS_ATTACH_DAC_LONG)
+		return;
+	if (!sds->rxcal_idle_since) {
+		sds->rxcal_idle_since = now;
+		return;
+	}
+	if (sds->rxcal_nudges > RTPCS_RXCAL_NUDGE_MAX)
+		return;
+
+	idle_ms = jiffies_to_msecs(now - sds->rxcal_idle_since);
+	if (idle_ms < RTPCS_RXCAL_NUDGE_MS <<
+		      min_t(u8, sds->rxcal_nudges, RTPCS_RXCAL_NUDGE_MAX - 1))
+		return;
+
+	if (sds->rxcal_nudges++ == RTPCS_RXCAL_NUDGE_MAX) {
+		dev_warn(sds->ctrl->dev,
+			 "SerDes %u: still no RX signal, giving up re-initialising until the next module insert\n",
+			 sds->id);
+		return;
+	}
+
+	dev_warn(sds->ctrl->dev,
+		 "SerDes %u: no RX signal for %us with module present, re-initialising (%u/%u)\n",
+		 sds->id, idle_ms / 1000, sds->rxcal_nudges, RTPCS_RXCAL_NUDGE_MAX);
+	ret = rtpcs_sds_reconfigure_attachment(sds);
+	if (!ret)
+		ret = sds->ops->post_config(sds, sds->hw_mode);
+	if (ret < 0)
+		dev_err(sds->ctrl->dev, "SerDes %u: re-initialisation failed: %d\n",
+			sds->id, ret);
+	sds->rxcal_idle_since = 0;
 }
 
 static void rtpcs_93xx_rx_cali_work_handler(struct work_struct *work)
@@ -2090,10 +2142,13 @@ static void rtpcs_93xx_rx_cali_work_handler(struct work_struct *work)
 		dev_err_ratelimited(sds->ctrl->dev, "SerDes %u: RX calibration readiness check failed: %d\n",
 				    sds->id, ret);
 	if (ret <= 0) {
+		if (!ret)
+			rtpcs_93xx_sds_rxcal_nudge(sds);
 		schedule_delayed_work(&sds->cali_work, msecs_to_jiffies(RTPCS_RXCAL_POLL_MS));
 		goto unlock;
 	}
 
+	sds->rxcal_idle_since = 0;
 	sds->rxcal_tries++;
 	ret = sds->ops->rx_calibrate(sds);
 	dev_dbg(sds->ctrl->dev, "SerDes %u: RX calibration attempt %u/%u returned %d\n",
@@ -2106,6 +2161,8 @@ static void rtpcs_93xx_rx_cali_work_handler(struct work_struct *work)
 		}
 		dev_warn(sds->ctrl->dev, "SerDes %u: RX calibration did not pass after %u attempts: %d\n",
 			 sds->id, sds->rxcal_tries, ret);
+	} else {
+		sds->rxcal_nudges = 0;
 	}
 	rtpcs_93xx_sds_arm_linkmon(sds);
 unlock:
@@ -4960,6 +5017,7 @@ static int rtpcs_pcs_config(struct phylink_pcs *pcs, unsigned int neg_mode,
 					sds->id);
 			sds->rx_phase = RTPCS_RX_PHASE_IDLE;
 			sds->rxmon_down = 0;
+			sds->rxcal_nudges = 0;
 		}
 
 		if (mode_changed) {
